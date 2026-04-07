@@ -1,0 +1,58 @@
+package com.filament.sense.ui.screen.spools
+
+import androidx.lifecycle.SavedStateHandle
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import com.filament.sense.domain.usecase.GetSpoolsUseCase
+import com.filament.sense.domain.usecase.UpdateSpoolConfigUseCase
+import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
+import javax.inject.Inject
+
+@HiltViewModel
+class SpoolEditViewModel @Inject constructor(
+    savedStateHandle: SavedStateHandle,
+    private val getSpools: GetSpoolsUseCase,
+    private val updateSpoolConfig: UpdateSpoolConfigUseCase,
+) : ViewModel() {
+
+    private val index: Int = checkNotNull(savedStateHandle["index"])
+
+    private val _state = MutableStateFlow(SpoolFormUiState(targetIndex = index))
+    val state: StateFlow<SpoolFormUiState> = _state.asStateFlow()
+
+    init {
+        viewModelScope.launch {
+            val spool = getSpools().first().getOrNull(index) ?: return@launch
+            _state.value = SpoolFormUiState(
+                name = spool.name,
+                colorArgb = spool.colorArgb,
+                nominalWeightGrams = spool.nominalWeightGrams,
+                baselineWeightGrams = spool.baselineWeight,
+                targetIndex = index,
+            )
+        }
+    }
+
+    fun onNameChange(value: String) { _state.value = _state.value.copy(name = value) }
+    fun onColorChange(argb: Int) { _state.value = _state.value.copy(colorArgb = argb) }
+    fun onNominalWeightChange(value: Int) { _state.value = _state.value.copy(nominalWeightGrams = value) }
+    fun onBaselineWeightChange(value: Float) { _state.value = _state.value.copy(baselineWeightGrams = value) }
+
+    fun save() {
+        val s = _state.value
+        viewModelScope.launch {
+            updateSpoolConfig(
+                index = index,
+                name = s.name,
+                colorArgb = s.colorArgb,
+                nominalWeight = s.nominalWeightGrams,
+                baselineWeight = s.baselineWeightGrams,
+            )
+        }
+    }
+}

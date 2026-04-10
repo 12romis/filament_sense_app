@@ -1,6 +1,8 @@
 package com.filament.sense.data.ble
 
 import android.content.Context
+import android.os.Handler
+import android.os.Looper
 import com.filament.sense.domain.model.DeviceState
 import com.filament.sense.domain.model.EnvData
 import com.filament.sense.domain.model.SpoolSlot
@@ -9,6 +11,7 @@ import com.welie.blessed.BluetoothCentralManagerCallback
 import com.welie.blessed.BluetoothPeripheral
 import com.welie.blessed.BluetoothPeripheralCallback
 import com.welie.blessed.GattStatus
+import com.welie.blessed.HciStatus
 import com.welie.blessed.ScanFailure
 import com.welie.blessed.WriteType
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -90,7 +93,7 @@ class BleManager @Inject constructor(
             _deviceState.value = DeviceState.CONNECTING
         }
 
-        override fun onDisconnectedPeripheral(peripheral: BluetoothPeripheral, status: GattStatus) {
+        override fun onDisconnectedPeripheral(peripheral: BluetoothPeripheral, status: HciStatus) {
             connectedPeripheral = null
             _deviceState.value = DeviceState.DISCONNECTED
             _envData.value = null
@@ -106,7 +109,7 @@ class BleManager @Inject constructor(
     }
 
     private val central: BluetoothCentralManager by lazy {
-        BluetoothCentralManager(context, centralCallback)
+        BluetoothCentralManager(context, centralCallback, Handler(Looper.getMainLooper()))
     }
 
     // ── Public API ───────────────────────────────────────────────────────────

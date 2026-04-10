@@ -6,31 +6,34 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.layout.size
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.res.vectorResource
 import androidx.compose.ui.unit.dp
+import com.filament.sense.R
 
-data class BottomNavItem(
-    val icon: String,
+private data class NavItem(
     val label: String,
     val route: String,
+    val iconRes: Int,
 )
 
-val bottomNavItems = listOf(
-    BottomNavItem("⊙", "Пристрій", "home"),
-    BottomNavItem("≡", "Котушки", "spools"),
-    BottomNavItem("◎", "Аналітика", "analytics"),
-    BottomNavItem("⚙", "Налашт.", "settings"),
+private val navItems = listOf(
+    NavItem("Пристрій",  "home",      R.drawable.ic_nav_device),
+    NavItem("Котушки",   "spools",    R.drawable.ic_nav_spools),
+    NavItem("Аналітика", "analytics", R.drawable.ic_nav_analytics),
+    NavItem("Налашт.",   "settings",  R.drawable.ic_nav_settings),
 )
 
 @Composable
@@ -44,47 +47,48 @@ fun BottomNav(
             .fillMaxWidth()
             .background(MaterialTheme.colorScheme.surface),
     ) {
-        HorizontalDivider(color = MaterialTheme.colorScheme.outline)
+        HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.4f))
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(80.dp),
+                .height(64.dp),
             horizontalArrangement = Arrangement.SpaceEvenly,
         ) {
-            bottomNavItems.forEach { item ->
-                val isSelected = currentRoute == item.route
-                val color = if (isSelected) MaterialTheme.colorScheme.primary
-                            else MaterialTheme.colorScheme.onSurfaceVariant
+            navItems.forEach { item ->
+                val selected = currentRoute == item.route
+                val contentColor = if (selected) MaterialTheme.colorScheme.primary
+                                   else MaterialTheme.colorScheme.onSurfaceVariant
 
                 Box(
                     modifier = Modifier
                         .weight(1f)
-                        .height(80.dp)
+                        .height(64.dp)
                         .clickable { onItemClick(item.route) },
-                    contentAlignment = Alignment.Center,
+                    contentAlignment = Alignment.TopCenter,
                 ) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        // Amber indicator bar on top for active tab
-                        if (isSelected) {
-                            Box(
-                                modifier = Modifier
-                                    .width(78.dp)
-                                    .height(3.dp)
-                                    .clip(RoundedCornerShape(2.dp))
-                                    .background(MaterialTheme.colorScheme.primary)
-                                    .align(Alignment.CenterHorizontally),
-                            )
-                        }
-                        Text(
-                            text = item.icon,
-                            style = MaterialTheme.typography.titleMedium,
-                            color = color,
-                            modifier = Modifier.padding(top = if (isSelected) 6.dp else 10.dp),
+                        // Top indicator line — always 2dp to avoid layout shift
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(2.dp)
+                                .background(
+                                    if (selected) MaterialTheme.colorScheme.primary
+                                    else Color.Transparent,
+                                ),
                         )
+                        Spacer(modifier = Modifier.height(10.dp))
+                        Icon(
+                            imageVector = ImageVector.vectorResource(item.iconRes),
+                            contentDescription = item.label,
+                            tint = contentColor,
+                            modifier = Modifier.size(22.dp),
+                        )
+                        Spacer(modifier = Modifier.height(3.dp))
                         Text(
                             text = item.label,
                             style = MaterialTheme.typography.labelSmall,
-                            color = color,
+                            color = contentColor,
                         )
                     }
                 }

@@ -1,6 +1,7 @@
 package com.filament.sense.di
 
 import android.content.Context
+import android.content.SharedPreferences
 import androidx.room.Room
 import com.filament.sense.data.local.AppDatabase
 import com.filament.sense.data.local.dao.MeasurementDao
@@ -38,7 +39,12 @@ abstract class AppModule {
                 context,
                 AppDatabase::class.java,
                 "filament_sense.db",
-            ).build()
+            ).fallbackToDestructiveMigration().build()
+
+        @Provides
+        @Singleton
+        fun provideSharedPreferences(@ApplicationContext context: Context): SharedPreferences =
+            context.getSharedPreferences("filament_prefs", Context.MODE_PRIVATE)
 
         @Provides
         @Singleton

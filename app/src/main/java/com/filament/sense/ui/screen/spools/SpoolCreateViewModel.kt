@@ -4,7 +4,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.filament.sense.domain.usecase.UpdateSpoolConfigUseCase
+import com.filament.sense.domain.usecase.CreateSpoolUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -17,12 +17,12 @@ data class SpoolFormUiState(
     val colorArgb: Int = Color.White.toArgb(),
     val nominalWeightGrams: Int = 1000,
     val baselineWeightGrams: Float = 0f,
-    val targetIndex: Int = 0,
+    val isActive: Boolean = false,
 )
 
 @HiltViewModel
 class SpoolCreateViewModel @Inject constructor(
-    private val updateSpoolConfig: UpdateSpoolConfigUseCase,
+    private val createSpool: CreateSpoolUseCase,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(SpoolFormUiState())
@@ -36,8 +36,7 @@ class SpoolCreateViewModel @Inject constructor(
     fun save() {
         val s = _state.value
         viewModelScope.launch {
-            updateSpoolConfig(
-                index = s.targetIndex,
+            createSpool(
                 name = s.name,
                 colorArgb = s.colorArgb,
                 nominalWeight = s.nominalWeightGrams,

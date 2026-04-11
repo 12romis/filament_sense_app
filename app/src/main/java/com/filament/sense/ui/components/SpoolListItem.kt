@@ -72,13 +72,14 @@ fun SpoolListItem(
                 modifier = Modifier
                     .size(20.dp)
                     .clip(CircleShape)
+                    .border(1.dp, MaterialTheme.colorScheme.primary, CircleShape)
                     .background(Color(spool.colorArgb)),
             )
             Spacer(modifier = Modifier.width(10.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
-                        text = spool.name.ifEmpty { "Слот ${spool.index + 1}" },
+                        text = spool.name.ifEmpty { "Котушка #${spool.id}" },
                         style = MaterialTheme.typography.bodyMedium.copy(
                             fontWeight = FontWeight.Medium,
                             fontSize = 14.sp,

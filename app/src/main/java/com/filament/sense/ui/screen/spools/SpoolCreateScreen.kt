@@ -15,6 +15,7 @@ fun SpoolCreateScreen(
 
     SpoolFormScreen(
         title = "Нова котушка",
+        saveLabel = "Зберегти котушку",
         state = state,
         onNameChange = viewModel::onNameChange,
         onColorChange = viewModel::onColorChange,

@@ -10,16 +10,16 @@ import androidx.room.PrimaryKey
     foreignKeys = [
         ForeignKey(
             entity = SpoolEntity::class,
-            parentColumns = ["index"],
-            childColumns = ["spoolIndex"],
+            parentColumns = ["id"],
+            childColumns = ["spoolId"],
             onDelete = ForeignKey.CASCADE,
         ),
     ],
-    indices = [Index("spoolIndex"), Index("timestamp")],
+    indices = [Index("spoolId"), Index("timestamp")],
 )
 data class MeasurementEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
-    val spoolIndex: Int,
+    val spoolId: Int,
     val remainingGrams: Float,
     val temperature: Float?,
     val humidity: Float?,

@@ -75,7 +75,7 @@ class BleManager @Inject constructor(
             val slotIndex = GattConstants.SPOOL_DATA_UUIDS.indexOf(uuid)
             when {
                 slotIndex >= 0 -> {
-                    val spool = BleDataParser.parseSpoolData(value, slotIndex)
+                    val spool = BleDataParser.parseSpoolData(value)
                     _spoolUpdates.tryEmit(spool)
                 }
                 uuid == GattConstants.ENV_DATA_UUID -> {
@@ -116,7 +116,7 @@ class BleManager @Inject constructor(
 
     fun startScan() {
         _deviceState.value = DeviceState.SCANNING
-        central.scanForPeripheralsWithNames(arrayOf(GattConstants.DEVICE_NAME))
+        central.scanForPeripherals()
     }
 
     fun stopScan() {

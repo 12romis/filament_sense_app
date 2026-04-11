@@ -14,10 +14,10 @@ interface MeasurementDao {
 
     @Query(
         """SELECT * FROM measurements
-           WHERE spoolIndex = :spoolIndex AND timestamp >= :sinceMs
+           WHERE spoolId = :spoolId AND timestamp >= :sinceMs
            ORDER BY timestamp ASC"""
     )
-    fun getMeasurementsForSpool(spoolIndex: Int, sinceMs: Long): Flow<List<MeasurementEntity>>
+    fun getMeasurementsForSpool(spoolId: Int, sinceMs: Long): Flow<List<MeasurementEntity>>
 
     @Query("DELETE FROM measurements WHERE timestamp < :beforeMs")
     suspend fun deleteOlderThan(beforeMs: Long)

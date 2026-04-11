@@ -1,10 +1,11 @@
 package com.filament.sense.domain.usecase
 
 import com.filament.sense.domain.repository.SpoolRepository
+import kotlinx.coroutines.flow.StateFlow
 import javax.inject.Inject
 
-class SetActiveSpoolUseCase @Inject constructor(
+class GetThresholdsUseCase @Inject constructor(
     private val spoolRepository: SpoolRepository,
 ) {
-    suspend operator fun invoke(id: Int) = spoolRepository.setActiveSpool(id)
+    operator fun invoke(): StateFlow<Triple<Int, Int, Int>> = spoolRepository.thresholds
 }

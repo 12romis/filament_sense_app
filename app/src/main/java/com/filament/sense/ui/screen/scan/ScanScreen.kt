@@ -1,5 +1,10 @@
 package com.filament.sense.ui.screen.scan
 
+import android.Manifest
+import android.content.pm.PackageManager
+import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -28,20 +33,30 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.content.ContextCompat
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
-import com.filament.sense.domain.model.DeviceState
 import com.filament.sense.ui.navigation.Screen
 import com.filament.sense.ui.theme.OnPrimary
 import com.filament.sense.ui.theme.PrimaryContainer
@@ -52,15 +67,38 @@ fun ScanScreen(
     viewModel: ScanViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val context = LocalContext.current
 
-    // Auto-start scan
-    LaunchedEffect(Unit) { viewModel.startScan() }
+    // BLE runtime permissions — потрібні на Android 12+ (API 31+)
+    val blePermissions = remember {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            arrayOf(
+                Manifest.permission.BLUETOOTH_SCAN,
+                Manifest.permission.BLUETOOTH_CONNECT,
+            )
+        } else emptyArray()
+    }
 
-    // Navigate home on connect
-    LaunchedEffect(state.isConnecting) {
-        if (!state.isScanning && !state.isConnecting && state.devices.any { it.isFilamentSense }) {
-            // connected — navigate back
+    var permissionDenied by remember { mutableStateOf(false) }
+
+    val permissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { result ->
+        if (result.values.all { it }) viewModel.startScan()
+        else permissionDenied = true
+    }
+
+    // Зупиняємо сканування при виході з екрану (до очищення ViewModel)
+    DisposableEffect(Unit) {
+        onDispose { viewModel.stopScan() }
+    }
+
+    LaunchedEffect(Unit) {
+        val allGranted = blePermissions.all {
+            ContextCompat.checkSelfPermission(context, it) == PackageManager.PERMISSION_GRANTED
         }
+        if (allGranted) viewModel.startScan()
+        else permissionLauncher.launch(blePermissions)
     }
 
     Scaffold(containerColor = MaterialTheme.colorScheme.background) { innerPadding ->
@@ -78,12 +116,13 @@ fun ScanScreen(
                     .padding(horizontal = 12.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text(
-                    text = "←",
-                    style = MaterialTheme.typography.titleLarge,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    modifier = Modifier.clickable { navController.popBackStack() },
-                )
+                IconButton(onClick = { navController.popBackStack() }) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = "Назад",
+                        tint = MaterialTheme.colorScheme.onSurface,
+                    )
+                }
                 Spacer(modifier = Modifier.width(12.dp))
                 Text(
                     text = "Додати пристрій",
@@ -92,54 +131,80 @@ fun ScanScreen(
                 )
             }
 
-            // ── Radar animation ──────────────────────────────────────────
-            Text(
-                text = "Пошук пристроїв...",
-                style = MaterialTheme.typography.bodyMedium.copy(fontSize = 16.sp),
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier
-                    .align(Alignment.CenterHorizontally)
-                    .padding(top = 16.dp, bottom = 16.dp),
-            )
-
-            RadarAnimation(modifier = Modifier.align(Alignment.CenterHorizontally))
-
-            Spacer(modifier = Modifier.height(24.dp))
-
-            // ── Device list ──────────────────────────────────────────────
-            Text(
-                text = "Знайдені пристрої",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(horizontal = 16.dp),
-            )
-            HorizontalDivider(
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
-                color = MaterialTheme.colorScheme.outline,
-            )
-
-            LazyColumn(modifier = Modifier.padding(horizontal = 16.dp)) {
-                items(state.devices) { device ->
-                    ScannedDeviceItem(
-                        device = device,
-                        onConnect = {
-                            viewModel.connect(device)
-                            navController.navigate(Screen.Home.route) {
-                                popUpTo(Screen.Home.route) { inclusive = true }
-                            }
-                        },
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
+            if (permissionDenied) {
+                // ── Відмовлено у дозволах ──────────────────────────────
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(
+                            text = "Потрібен дозвіл на Bluetooth",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.padding(horizontal = 32.dp),
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = "Надайте дозвіл у Налаштуваннях застосунку",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.padding(horizontal = 32.dp),
+                        )
+                    }
                 }
-            }
+            } else {
+                // ── Radar animation ──────────────────────────────────────
+                Text(
+                    text = "Пошук пристроїв...",
+                    style = MaterialTheme.typography.bodyMedium.copy(fontSize = 16.sp),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier
+                        .align(Alignment.CenterHorizontally)
+                        .padding(top = 16.dp, bottom = 16.dp),
+                )
 
-            Spacer(modifier = Modifier.height(8.dp))
-            Text(
-                text = "Переконайтесь що пристрій увімкнено",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(horizontal = 16.dp),
-            )
+                RadarAnimation(modifier = Modifier.align(Alignment.CenterHorizontally))
+
+                Spacer(modifier = Modifier.height(24.dp))
+
+                // ── Device list ──────────────────────────────────────────
+                Text(
+                    text = "Знайдені пристрої",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = 16.dp),
+                )
+                HorizontalDivider(
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+                    color = MaterialTheme.colorScheme.outline,
+                )
+
+                LazyColumn(modifier = Modifier.padding(horizontal = 16.dp)) {
+                    items(state.devices) { device ->
+                        ScannedDeviceItem(
+                            device = device,
+                            onConnect = {
+                                viewModel.connect(device)
+                                navController.navigate(Screen.Home.route) {
+                                    popUpTo(Screen.Home.route) { inclusive = true }
+                                }
+                            },
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = "Переконайтесь що пристрій увімкнено",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = 16.dp),
+                )
+            }
         }
     }
 }
@@ -161,7 +226,6 @@ private fun RadarAnimation(modifier: Modifier = Modifier) {
         modifier = modifier.size(160.dp),
         contentAlignment = Alignment.Center,
     ) {
-        // Outer ring (animated opacity)
         Box(
             modifier = Modifier
                 .size(160.dp)
@@ -180,7 +244,6 @@ private fun RadarAnimation(modifier: Modifier = Modifier) {
                 .clip(CircleShape)
                 .border(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = pulse), CircleShape),
         )
-        // Center dot
         Box(
             modifier = Modifier
                 .size(30.dp)
@@ -225,7 +288,6 @@ private fun ScannedDeviceItem(
             .padding(14.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        // Device icon
         Box(
             modifier = Modifier
                 .size(32.dp)

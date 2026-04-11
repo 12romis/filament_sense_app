@@ -7,10 +7,10 @@ class UpdateSpoolConfigUseCase @Inject constructor(
     private val spoolRepository: SpoolRepository,
 ) {
     suspend operator fun invoke(
-        index: Int,
+        id: Int,
         name: String,
         colorArgb: Int,
         nominalWeight: Int,
         baselineWeight: Float,
-    ) = spoolRepository.updateSpoolConfig(index, name, colorArgb, nominalWeight, baselineWeight)
+    ) = spoolRepository.updateSpoolConfig(id, name, colorArgb, nominalWeight, baselineWeight)
 }

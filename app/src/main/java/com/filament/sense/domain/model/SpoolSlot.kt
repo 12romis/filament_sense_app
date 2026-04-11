@@ -1,20 +1,19 @@
 package com.filament.sense.domain.model
 
-// 0xFFFFFFFF = White in ARGB
 private const val COLOR_WHITE_ARGB = -1
 
 data class SpoolSlot(
-    val index: Int,
+    val id: Int = 0,
     val name: String = "",
     val material: String = "",
     val colorArgb: Int = COLOR_WHITE_ARGB,
     val nominalWeightGrams: Int = 1000,
-    val baselineWeight: Float = 0f,       // вага порожньої котушки (tare)
-    val remainingGrams: Float = 0f,       // залишок філаменту (з BLE)
-    val grossWeightGrams: Float = 0f,     // вага брутто (з BLE)
-    val hasFilament: Boolean = false,     // датчик наявності філаменту
-    val isActive: Boolean = false,        // активна котушка
-    val startDate: Long? = null,          // дата початку використання (ms)
+    val baselineWeight: Float = 0f,
+    val remainingGrams: Float = 0f,
+    val grossWeightGrams: Float = 0f,
+    val hasFilament: Boolean = false,
+    val isActive: Boolean = false,
+    val startDate: Long? = null,
 ) {
     val remainingPercent: Float
         get() = if (nominalWeightGrams > 0) {

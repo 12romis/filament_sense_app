@@ -1,6 +1,11 @@
 package com.filament.sense.ui.screen.home
 
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.Image
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
@@ -27,14 +32,21 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
+import com.filament.sense.R
 import com.filament.sense.domain.model.DeviceState
 import com.filament.sense.domain.model.SpoolSlot
 import com.filament.sense.ui.components.BottomNav
@@ -89,12 +101,19 @@ fun HomeScreen(
                 )
             }
 
-            // ── Connection status banner ─────────────────────────────────
-            ConnectionBanner(deviceState = state.deviceState)
+            // ── Connection status banner (тільки коли пристрій відомий системі) ──
+            val showBanner = state.deviceState == DeviceState.CONNECTED ||
+                             state.deviceState == DeviceState.CONNECTING
+            if (showBanner) {
+                ConnectionBanner(deviceState = state.deviceState)
+                Spacer(modifier = Modifier.height(12.dp))
+            }
 
-            Spacer(modifier = Modifier.height(12.dp))
-
-            if (state.deviceState == DeviceState.DISCONNECTED) {
+            // SCANNING також вважається "немає пристрою" — запобігає флешу при
+            // поверненні зі ScanScreen поки StateFlow ще не оновився
+            val isEmptyState = state.deviceState == DeviceState.DISCONNECTED ||
+                               state.deviceState == DeviceState.SCANNING
+            if (isEmptyState) {
                 // ── Empty state ──────────────────────────────────────────
                 EmptyDeviceState(onAddDevice = { navController.navigate(Screen.Scan.route) })
             } else {
@@ -105,7 +124,7 @@ fun HomeScreen(
                     activeSpool = state.activeSpool,
                     onSpoolClick = {
                         state.activeSpool?.let {
-                            navController.navigate(Screen.SpoolDetail.createRoute(it.index))
+                            navController.navigate(Screen.SpoolDetail.createRoute(it.id))
                         }
                     },
                     modifier = Modifier.padding(horizontal = 16.dp),
@@ -196,6 +215,111 @@ private fun ConnectionBanner(deviceState: DeviceState) {
     }
 }
 
+// ── Empty state ───────────────────────────────────────────────────────────────
+
+@Composable
+private fun EmptyDeviceState(onAddDevice: () -> Unit) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 32.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Spacer(modifier = Modifier.height(10.dp))
+
+        // Три шари: зовнішнє кільце → внутрішнє кільце → ілюстрація пристрою
+        // Позиції per Figma: outer 280dp (op=50%), inner 240dp (op=30%), illustration 200dp
+        Box(
+            modifier = Modifier.size(280.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            Image(
+                painter = painterResource(R.drawable.img_empty_ring_outer),
+                contentDescription = null,
+                modifier = Modifier
+                    .size(280.dp)
+                    .alpha(0.5f),
+            )
+            Image(
+                painter = painterResource(R.drawable.img_empty_ring_inner),
+                contentDescription = null,
+                modifier = Modifier
+                    .size(240.dp)
+                    .alpha(0.3f),
+            )
+            DeviceIllustration(modifier = Modifier.size(200.dp))
+        }
+
+        // Текст починається трохи вище нижнього краю кілець (per Figma позиції)
+        Text(
+            text = "Немає пристрою",
+            style = MaterialTheme.typography.titleLarge.copy(
+                fontWeight = FontWeight.Bold,
+                fontSize = 28.sp,
+            ),
+            color = MaterialTheme.colorScheme.primary,
+        )
+        Spacer(modifier = Modifier.height(12.dp))
+        Text(
+            text = "Додайте пристрій FilamentSense\nщоб розпочати моніторинг котушок",
+            style = MaterialTheme.typography.bodyMedium.copy(fontSize = 14.sp),
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center,
+        )
+        Spacer(modifier = Modifier.height(56.dp))
+        Button(
+            onClick = onAddDevice,
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(48.dp),
+            shape = RoundedCornerShape(24.dp),
+            colors = ButtonDefaults.buttonColors(
+                containerColor = MaterialTheme.colorScheme.primary,
+                contentColor = MaterialTheme.colorScheme.onPrimary,
+            ),
+        ) {
+            Text(
+                text = "+ Додати пристрій",
+                style = MaterialTheme.typography.titleSmall.copy(fontSize = 15.sp),
+            )
+        }
+    }
+}
+
+// Ілюстрація пристрою — перебудована з SVG (Figma 17:76)
+@Composable
+private fun DeviceIllustration(modifier: Modifier = Modifier) {
+    val primary = MaterialTheme.colorScheme.primary
+    val primaryContainer = MaterialTheme.colorScheme.primaryContainer
+    val surfaceVariant = MaterialTheme.colorScheme.surfaceVariant
+
+    Canvas(modifier = modifier) {
+        val s = size.minDimension / 200f           // scale factor (SVG viewBox = 200×200)
+        val cx = size.width / 2
+        val cy = size.height / 2
+
+        // Clip всього малювання до кола щоб бар не виходив за межі
+        val circlePath = Path().apply { addOval(Rect(center = Offset(cx, cy), radius = size.minDimension / 2)) }
+        clipPath(circlePath) {
+            // Зовнішнє коло (#2C2C2C = surfaceVariant), r=100
+            drawCircle(color = surfaceVariant, radius = size.minDimension / 2, center = Offset(cx, cy))
+            // Середнє коло (#383838), r=67
+            drawCircle(color = Color(0xFF383838), radius = 67f * s, center = Offset(cx, cy))
+            // PrimaryContainer (темно-бурштиновий), r=33
+            drawCircle(color = primaryContainer, radius = 33f * s, center = Offset(cx, cy))
+            // Центральна бурштинова крапка, r=16
+            drawCircle(color = primary, radius = 16f * s, center = Offset(cx, cy))
+            // Нижня бурштинова смужка — "підставка" котушки (clipPath не дає їй виходити за коло)
+            drawRoundRect(
+                color = primary,
+                topLeft = Offset(16f * s, 182f * s),
+                size = Size(168f * s, 18f * s),
+                cornerRadius = CornerRadius(3f * s),
+            )
+        } // end clipPath
+    }
+}
+
 // ── Device card ──────────────────────────────────────────────────────────────
 
 @Composable
@@ -224,7 +348,6 @@ private fun DeviceCard(
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         Spacer(modifier = Modifier.height(8.dp))
-        // Status badge
         Row(
             modifier = Modifier
                 .clip(RoundedCornerShape(13.dp))
@@ -245,11 +368,10 @@ private fun DeviceCard(
                 color = StatusConnected,
             )
         }
-        // Active spool link
         activeSpool?.let { spool ->
             Spacer(modifier = Modifier.height(12.dp))
             Text(
-                text = "Котушка: ${spool.name.ifEmpty { "Слот ${spool.index + 1}" }}  →",
+                text = "Котушка: ${spool.name.ifEmpty { "Котушка #${spool.id}" }}  →",
                 style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium),
                 color = MaterialTheme.colorScheme.primary,
                 modifier = Modifier.clickable(onClick = onSpoolClick),
@@ -291,12 +413,11 @@ private fun ActiveSpoolCard(
             )
             Spacer(modifier = Modifier.width(8.dp))
             Text(
-                text = spool.name.ifEmpty { "Слот ${spool.index + 1}" },
+                text = spool.name.ifEmpty { "Котушка #${spool.id}" },
                 style = MaterialTheme.typography.titleSmall,
                 color = MaterialTheme.colorScheme.primary,
                 modifier = Modifier.weight(1f),
             )
-            // Active badge
             Box(
                 modifier = Modifier
                     .clip(RoundedCornerShape(11.dp))
@@ -335,84 +456,5 @@ private fun ActiveSpoolCard(
         DataRow(icon = "📅", label = "Дата початку", value = dateStr)
         Spacer(modifier = Modifier.height(8.dp))
         DataRow(icon = "📦", label = "Номінал", value = "${spool.nominalWeightGrams} г")
-    }
-}
-
-// ── Empty state ───────────────────────────────────────────────────────────────
-
-@Composable
-private fun EmptyDeviceState(onAddDevice: () -> Unit) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 32.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        Spacer(modifier = Modifier.height(80.dp))
-        // Radar circles (decorative)
-        Box(
-            modifier = Modifier.size(200.dp),
-            contentAlignment = Alignment.Center,
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(200.dp)
-                    .clip(CircleShape)
-                    .background(Color(0xFF1E1E1E).copy(alpha = 0.5f)),
-            )
-            Box(
-                modifier = Modifier
-                    .size(140.dp)
-                    .clip(CircleShape)
-                    .background(Color(0xFF1E1E1E).copy(alpha = 0.7f)),
-            )
-            Box(
-                modifier = Modifier
-                    .size(80.dp)
-                    .clip(CircleShape)
-                    .background(MaterialTheme.colorScheme.surface),
-            )
-            Text(
-                text = "B",
-                style = MaterialTheme.typography.titleMedium.copy(
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 22.sp,
-                ),
-                color = MaterialTheme.colorScheme.primary,
-            )
-        }
-        Spacer(modifier = Modifier.height(32.dp))
-        Text(
-            text = "Немає пристрою",
-            style = MaterialTheme.typography.titleLarge.copy(
-                fontWeight = FontWeight.Bold,
-                fontSize = 28.sp,
-            ),
-            color = MaterialTheme.colorScheme.primary,
-        )
-        Spacer(modifier = Modifier.height(12.dp))
-        Text(
-            text = "Додайте пристрій FilamentSense\nщоб розпочати моніторинг котушок",
-            style = MaterialTheme.typography.bodyMedium.copy(fontSize = 14.sp),
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-        )
-        Spacer(modifier = Modifier.height(40.dp))
-        Button(
-            onClick = onAddDevice,
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(48.dp),
-            shape = RoundedCornerShape(24.dp),
-            colors = ButtonDefaults.buttonColors(
-                containerColor = MaterialTheme.colorScheme.primary,
-                contentColor = MaterialTheme.colorScheme.onPrimary,
-            ),
-        ) {
-            Text(
-                text = "+ Додати пристрій",
-                style = MaterialTheme.typography.titleSmall.copy(fontSize = 15.sp),
-            )
-        }
     }
 }

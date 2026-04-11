@@ -1,14 +1,20 @@
 package com.filament.sense.ui.components
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.dp
 
 /**
@@ -26,6 +32,8 @@ fun DataRow(
     label: String,
     value: String,
     modifier: Modifier = Modifier,
+    iconStyle: TextStyle? = null,
+    onEdit: (() -> Unit)? = null,
 ) {
     Row(
         modifier = modifier.fillMaxWidth(),
@@ -33,7 +41,7 @@ fun DataRow(
     ) {
         Text(
             text = icon,
-            style = MaterialTheme.typography.bodyMedium,
+            style = iconStyle ?: MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.secondary,
         )
         Spacer(modifier = Modifier.width(8.dp))
@@ -45,8 +53,21 @@ fun DataRow(
         )
         Text(
             text = value,
-            style = MaterialTheme.typography.bodyMedium,
+            style = MaterialTheme.typography.bodyMedium.copy(
+                fontWeight = if (onEdit != null) androidx.compose.ui.text.font.FontWeight.Medium else androidx.compose.ui.text.font.FontWeight.Normal,
+            ),
             color = MaterialTheme.colorScheme.onSurface,
         )
+        if (onEdit != null) {
+            Spacer(modifier = Modifier.width(8.dp))
+            Icon(
+                imageVector = Icons.Filled.Edit,
+                contentDescription = "Редагувати",
+                modifier = Modifier
+                    .size(16.dp)
+                    .clickable(onClick = onEdit),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
     }
 }

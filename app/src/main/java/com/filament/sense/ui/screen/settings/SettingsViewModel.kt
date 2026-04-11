@@ -1,5 +1,6 @@
 package com.filament.sense.ui.screen.settings
 
+import android.content.SharedPreferences
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.filament.sense.domain.model.DeviceState
@@ -11,6 +12,8 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
+private const val PREF_NOTIFICATIONS_ENABLED = "notifications_enabled"
+
 data class SettingsUiState(
     val deviceName: String = "",
     val deviceState: DeviceState = DeviceState.DISCONNECTED,
@@ -20,9 +23,12 @@ data class SettingsUiState(
 @HiltViewModel
 class SettingsViewModel @Inject constructor(
     private val deviceRepo: DeviceRepository,
+    private val prefs: SharedPreferences,
 ) : ViewModel() {
 
-    private val _state = MutableStateFlow(SettingsUiState())
+    private val _state = MutableStateFlow(
+        SettingsUiState(notificationsEnabled = prefs.getBoolean(PREF_NOTIFICATIONS_ENABLED, false))
+    )
     val state: StateFlow<SettingsUiState> = _state.asStateFlow()
 
     init {
@@ -43,6 +49,7 @@ class SettingsViewModel @Inject constructor(
     }
 
     fun toggleNotifications(enabled: Boolean) {
+        prefs.edit().putBoolean(PREF_NOTIFICATIONS_ENABLED, enabled).apply()
         _state.value = _state.value.copy(notificationsEnabled = enabled)
     }
 }

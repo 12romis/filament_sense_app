@@ -6,5 +6,5 @@ import javax.inject.Inject
 class SetBaselineUseCase @Inject constructor(
     private val spoolRepository: SpoolRepository,
 ) {
-    suspend operator fun invoke(index: Int) = spoolRepository.saveBaseline(index)
+    suspend operator fun invoke(id: Int) = spoolRepository.saveBaseline(id)
 }

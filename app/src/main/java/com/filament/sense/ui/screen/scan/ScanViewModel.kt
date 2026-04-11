@@ -68,12 +68,16 @@ class ScanViewModel @Inject constructor(
         viewModelScope.launch { deviceRepo.startScan() }
     }
 
+    fun stopScan() {
+        deviceRepo.stopScan()
+    }
+
     fun connect(device: ScannedDevice) {
         viewModelScope.launch { deviceRepo.connectToDevice(device.address) }
     }
 
     override fun onCleared() {
         super.onCleared()
-        viewModelScope.launch { deviceRepo.stopScan() }
+        deviceRepo.stopScan() // синхронний виклик — не потребує корутини
     }
 }

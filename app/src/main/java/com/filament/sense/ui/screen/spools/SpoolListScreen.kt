@@ -22,6 +22,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -62,7 +63,7 @@ fun SpoolListScreen(
                         fontSize = 28.sp,
                     ),
                     color = MaterialTheme.colorScheme.onPrimary,
-                    modifier = Modifier.padding(bottom = 2.dp),
+                    modifier = Modifier,
                 )
             }
         },
@@ -87,15 +88,37 @@ fun SpoolListScreen(
                 )
             }
 
-            LazyColumn(modifier = Modifier.padding(horizontal = 16.dp)) {
-                items(state.spools) { spool ->
-                    SpoolListItem(
-                        spool = spool,
-                        onClick = {
-                            navController.navigate(Screen.SpoolDetail.createRoute(spool.index))
-                        },
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
+            if (state.spools.isEmpty()) {
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(
+                            text = "Котушок ще немає",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.onSurface,
+                        )
+                        Text(
+                            text = "Натисніть + щоб додати першу котушку",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.padding(top = 8.dp, start = 32.dp, end = 32.dp),
+                        )
+                    }
+                }
+            } else {
+                LazyColumn(modifier = Modifier.padding(horizontal = 16.dp)) {
+                    items(state.spools) { spool ->
+                        SpoolListItem(
+                            spool = spool,
+                            onClick = {
+                                navController.navigate(Screen.SpoolDetail.createRoute(spool.id))
+                            },
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                    }
                 }
             }
         }

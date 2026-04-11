@@ -11,14 +11,13 @@ object BleDataParser {
      * Парсить 12 байт слоту котушки.
      * Формат: remaining (Float LE) | gross (Float LE) | hasFilament (byte, 0=false)
      */
-    fun parseSpoolData(bytes: ByteArray, index: Int): SpoolSlot {
-        if (bytes.size < 9) return SpoolSlot(index = index)
+    fun parseSpoolData(bytes: ByteArray): SpoolSlot {
+        if (bytes.size < 9) return SpoolSlot()
         val buf = ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN)
         val remaining = buf.float
         val gross = buf.float
         val hasFilament = buf.get() != 0.toByte()
         return SpoolSlot(
-            index = index,
             remainingGrams = remaining,
             grossWeightGrams = gross,
             hasFilament = hasFilament,

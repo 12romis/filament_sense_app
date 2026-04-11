@@ -3,6 +3,7 @@ package com.filament.sense.ui.screen.spools
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.filament.sense.domain.usecase.DeleteSpoolUseCase
 import com.filament.sense.domain.usecase.GetSpoolsUseCase
 import com.filament.sense.domain.usecase.UpdateSpoolConfigUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -18,22 +19,23 @@ class SpoolEditViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
     private val getSpools: GetSpoolsUseCase,
     private val updateSpoolConfig: UpdateSpoolConfigUseCase,
+    private val deleteSpool: DeleteSpoolUseCase,
 ) : ViewModel() {
 
-    private val index: Int = checkNotNull(savedStateHandle["index"])
+    private val id: Int = checkNotNull(savedStateHandle["id"])
 
-    private val _state = MutableStateFlow(SpoolFormUiState(targetIndex = index))
+    private val _state = MutableStateFlow(SpoolFormUiState())
     val state: StateFlow<SpoolFormUiState> = _state.asStateFlow()
 
     init {
         viewModelScope.launch {
-            val spool = getSpools().first().getOrNull(index) ?: return@launch
+            val spool = getSpools().first().find { it.id == id } ?: return@launch
             _state.value = SpoolFormUiState(
                 name = spool.name,
                 colorArgb = spool.colorArgb,
                 nominalWeightGrams = spool.nominalWeightGrams,
                 baselineWeightGrams = spool.baselineWeight,
-                targetIndex = index,
+                isActive = spool.isActive,
             )
         }
     }
@@ -47,12 +49,16 @@ class SpoolEditViewModel @Inject constructor(
         val s = _state.value
         viewModelScope.launch {
             updateSpoolConfig(
-                index = index,
+                id = id,
                 name = s.name,
                 colorArgb = s.colorArgb,
                 nominalWeight = s.nominalWeightGrams,
                 baselineWeight = s.baselineWeightGrams,
             )
         }
+    }
+
+    fun delete() {
+        viewModelScope.launch { deleteSpool(id) }
     }
 }

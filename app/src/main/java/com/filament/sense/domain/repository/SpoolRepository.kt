@@ -8,14 +8,16 @@ import kotlinx.coroutines.flow.StateFlow
 
 interface SpoolRepository {
     val spools: Flow<List<SpoolSlot>>
+    fun getSpoolById(id: Int): Flow<SpoolSlot?>
     val envData: StateFlow<EnvData?>
-    val activeSpoolIndex: StateFlow<Int?>
+    val thresholds: StateFlow<Triple<Int, Int, Int>>
 
-    suspend fun setActiveSpool(index: Int)
-    suspend fun saveBaseline(index: Int)
-    suspend fun updateSpoolConfig(index: Int, name: String, colorArgb: Int, nominalWeight: Int, baselineWeight: Float)
+    suspend fun setActiveSpool(id: Int)
+    suspend fun saveBaseline(id: Int)
+    suspend fun createSpool(name: String, colorArgb: Int, nominalWeight: Int, baselineWeight: Float)
+    suspend fun updateSpoolConfig(id: Int, name: String, colorArgb: Int, nominalWeight: Int, baselineWeight: Float)
+    suspend fun deleteSpool(id: Int)
     suspend fun setThresholds(warning: Int, critical: Int, empty: Int)
 
-    /** Вимірювання залишку для конкретного слоту за вказаний період. */
-    fun getMeasurements(spoolIndex: Int, sinceMs: Long): Flow<List<Measurement>>
+    fun getMeasurements(spoolId: Int, sinceMs: Long): Flow<List<Measurement>>
 }

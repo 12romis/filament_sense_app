@@ -16,7 +16,7 @@ class DeviceRepositoryImpl @Inject constructor(
     override val deviceName: StateFlow<String> = bleManager.deviceName
 
     override suspend fun startScan() = bleManager.startScan()
-    override suspend fun stopScan() = bleManager.stopScan()
+    override fun stopScan() = bleManager.stopScan()
     override suspend fun connectToDevice(address: String) = bleManager.connectByAddress(address)
     override suspend fun disconnect() = bleManager.disconnect()
 }

@@ -7,7 +7,7 @@ interface DeviceRepository {
     val deviceState: StateFlow<DeviceState>
     val deviceName: StateFlow<String>
     suspend fun startScan()
-    suspend fun stopScan()
+    fun stopScan()
     suspend fun connectToDevice(address: String)
     suspend fun disconnect()
 }

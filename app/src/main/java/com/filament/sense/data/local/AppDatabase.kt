@@ -9,7 +9,7 @@ import com.filament.sense.data.local.entity.SpoolEntity
 
 @Database(
     entities = [SpoolEntity::class, MeasurementEntity::class],
-    version = 1,
+    version = 2,
     exportSchema = false,
 )
 abstract class AppDatabase : RoomDatabase() {

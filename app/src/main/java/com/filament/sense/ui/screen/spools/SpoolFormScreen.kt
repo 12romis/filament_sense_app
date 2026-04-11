@@ -18,19 +18,26 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -47,6 +54,7 @@ private val presetWeights = listOf(250, 500, 750, 1000, 2000, 3000)
 @Composable
 fun SpoolFormScreen(
     title: String,
+    saveLabel: String,
     state: SpoolFormUiState,
     onNameChange: (String) -> Unit,
     onColorChange: (Int) -> Unit,
@@ -54,8 +62,13 @@ fun SpoolFormScreen(
     onBaselineWeightChange: (Float) -> Unit,
     onSave: () -> Unit,
     onBack: () -> Unit,
+    onDelete: (() -> Unit)? = null,
+    snackbarHostState: SnackbarHostState? = null,
 ) {
-    Scaffold(containerColor = MaterialTheme.colorScheme.background) { innerPadding ->
+    Scaffold(
+        containerColor = MaterialTheme.colorScheme.background,
+        snackbarHost = { snackbarHostState?.let { SnackbarHost(it) } },
+    ) { innerPadding ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -70,24 +83,19 @@ fun SpoolFormScreen(
                     .padding(horizontal = 12.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text(
-                    text = "←",
-                    style = MaterialTheme.typography.titleLarge,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    modifier = Modifier.clickable(onClick = onBack),
-                )
+                IconButton(onClick = onBack) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = "Назад",
+                        tint = MaterialTheme.colorScheme.onSurface,
+                    )
+                }
                 Spacer(modifier = Modifier.width(12.dp))
                 Text(
                     text = title,
                     style = MaterialTheme.typography.titleMedium,
                     color = MaterialTheme.colorScheme.onSurface,
                     modifier = Modifier.weight(1f),
-                )
-                Text(
-                    text = "✓",
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.clickable(onClick = onSave),
                 )
             }
 
@@ -107,7 +115,7 @@ fun SpoolFormScreen(
                 value = state.name,
                 onValueChange = onNameChange,
                 label = { Text("Назва") },
-                placeholder = { Text("Наприклад: PLA White 1kg") },
+                placeholder = { Text("Наприклад: PETG Tiraplast 1kg") },
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp),
@@ -138,27 +146,21 @@ fun SpoolFormScreen(
                 Spacer(modifier = Modifier.height(8.dp))
                 Row {
                     presetColors.forEach { color ->
-                        val isSelected = state.colorArgb == color.value.toInt()
+                        val isSelected = state.colorArgb == color.toArgb()
                         Box(
                             modifier = Modifier
                                 .size(22.dp)
                                 .clip(CircleShape)
-                                .background(color)
                                 .then(
                                     if (isSelected) Modifier.border(2.dp, MaterialTheme.colorScheme.primary, CircleShape)
                                     else Modifier
                                 )
-                                .clickable { onColorChange(color.value.toInt()) },
+                                .background(color)
+                                .clickable { onColorChange(color.toArgb()) },
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                     }
                 }
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    text = "Оберіть колір котушки",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
             }
 
             Spacer(modifier = Modifier.height(12.dp))
@@ -264,9 +266,30 @@ fun SpoolFormScreen(
                 ),
             ) {
                 Text(
-                    text = "Зберегти котушку",
+                    text = saveLabel,
                     style = MaterialTheme.typography.titleSmall.copy(fontSize = 15.sp),
                 )
+            }
+
+            if (onDelete != null) {
+                Spacer(modifier = Modifier.height(12.dp))
+                OutlinedButton(
+                    onClick = onDelete,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(48.dp)
+                        .padding(horizontal = 16.dp),
+                    shape = RoundedCornerShape(24.dp),
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        contentColor = MaterialTheme.colorScheme.error,
+                    ),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.error),
+                ) {
+                    Text(
+                        text = "Видалити котушку",
+                        style = MaterialTheme.typography.titleSmall.copy(fontSize = 15.sp),
+                    )
+                }
             }
 
             Spacer(modifier = Modifier.height(24.dp))

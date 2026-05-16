@@ -96,12 +96,12 @@ fun SpoolListScreen(
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Text(
                             text = "Котушок ще немає",
-                            style = MaterialTheme.typography.titleMedium,
+                            style = MaterialTheme.typography.titleMedium.copy(fontSize = 18.sp),
                             color = MaterialTheme.colorScheme.onSurface,
                         )
                         Text(
                             text = "Натисніть + щоб додати першу котушку",
-                            style = MaterialTheme.typography.bodyMedium,
+                            style = MaterialTheme.typography.bodyMedium.copy(fontSize = 15.sp),
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             textAlign = TextAlign.Center,
                             modifier = Modifier.padding(top = 8.dp, start = 32.dp, end = 32.dp),

@@ -1,8 +1,11 @@
 package com.filament.sense.data.ble
 
+import android.bluetooth.BluetoothManager
 import android.content.Context
+import android.content.SharedPreferences
 import android.os.Handler
 import android.os.Looper
+import com.filament.sense.domain.model.ConfigData
 import com.filament.sense.domain.model.DeviceState
 import com.filament.sense.domain.model.EnvData
 import com.filament.sense.domain.model.SpoolSlot
@@ -21,13 +24,16 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
-import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
+
+private const val PREF_LAST_MAC = "last_connected_mac"
+private const val PREF_LAST_NAME = "last_connected_name"
 
 @Singleton
 class BleManager @Inject constructor(
     @ApplicationContext private val context: Context,
+    private val prefs: SharedPreferences,
 ) {
 
     // ── Public state ────────────────────────────────────────────────────────
@@ -38,32 +44,51 @@ class BleManager @Inject constructor(
     private val _deviceName = MutableStateFlow("")
     val deviceName: StateFlow<String> = _deviceName.asStateFlow()
 
-    /** Оновлення по одному слоту. Key = index. */
-    private val _spoolUpdates = MutableSharedFlow<SpoolSlot>(replay = GattConstants.SPOOL_DATA_UUIDS.size)
+    private val _spoolUpdates = MutableSharedFlow<SpoolSlot>(replay = 1)
     val spoolUpdates: SharedFlow<SpoolSlot> = _spoolUpdates.asSharedFlow()
 
     private val _envData = MutableStateFlow<EnvData?>(null)
     val envData: StateFlow<EnvData?> = _envData.asStateFlow()
 
-    /** Список пристроїв знайдених під час сканування */
-    private val _scanResults = MutableSharedFlow<BluetoothPeripheral>(replay = 0)
-    val scanResults: SharedFlow<BluetoothPeripheral> = _scanResults.asSharedFlow()
+    private val _configData = MutableStateFlow<ConfigData?>(null)
+    val configData: StateFlow<ConfigData?> = _configData.asStateFlow()
+
+    data class ScanEvent(val peripheral: BluetoothPeripheral, val isFilamentSense: Boolean)
+
+    private val _scanResults = MutableSharedFlow<ScanEvent>(replay = 0, extraBufferCapacity = 64)
+    val scanResults: SharedFlow<ScanEvent> = _scanResults.asSharedFlow()
+
+    private val _scanFailure = MutableStateFlow<String?>(null)
+    val scanFailure: StateFlow<String?> = _scanFailure.asStateFlow()
+
+    private val _debugInfo = MutableStateFlow("idle")
+    val debugInfo: StateFlow<String> = _debugInfo.asStateFlow()
+
+    val lastConnectedMac: String?
+        get() = prefs.getString(PREF_LAST_MAC, null)
+
+    /** true якщо disconnect() був викликаний явно (не обрив зв'язку) */
+    var wasManualDisconnect: Boolean = false
+        private set
 
     // ── Internals ────────────────────────────────────────────────────────────
 
     private var connectedPeripheral: BluetoothPeripheral? = null
+    private var connectingPeripheral: BluetoothPeripheral? = null
 
     private val peripheralCallback = object : BluetoothPeripheralCallback() {
 
         override fun onServicesDiscovered(peripheral: BluetoothPeripheral) {
-            // Підписуємось на notify для кожного слоту
-            GattConstants.SPOOL_DATA_UUIDS.forEach { uuid ->
-                peripheral.setNotify(GattConstants.SERVICE_UUID, uuid, true)
-            }
+            peripheral.setNotify(GattConstants.SERVICE_UUID, GattConstants.SPOOL_DATA_UUID, true)
             peripheral.setNotify(GattConstants.SERVICE_UUID, GattConstants.ENV_DATA_UUID, true)
+            peripheral.readCharacteristic(GattConstants.SERVICE_UUID, GattConstants.CONFIG_UUID)
+            // Позачергове читання поточного стану одразу після підключення —
+            // нотифікації приходять лише при зміні, тому без цього дані
+            // з'являються із затримкою або не з'являються взагалі.
+            peripheral.readCharacteristic(GattConstants.SERVICE_UUID, GattConstants.SPOOL_DATA_UUID)
+            peripheral.readCharacteristic(GattConstants.SERVICE_UUID, GattConstants.ENV_DATA_UUID)
             _deviceState.value = DeviceState.CONNECTED
         }
-
         override fun onCharacteristicUpdate(
             peripheral: BluetoothPeripheral,
             value: ByteArray,
@@ -71,15 +96,19 @@ class BleManager @Inject constructor(
             status: GattStatus,
         ) {
             if (status != GattStatus.SUCCESS) return
-            val uuid = characteristic.uuid
-            val slotIndex = GattConstants.SPOOL_DATA_UUIDS.indexOf(uuid)
-            when {
-                slotIndex >= 0 -> {
-                    val spool = BleDataParser.parseSpoolData(value)
-                    _spoolUpdates.tryEmit(spool)
+            when (characteristic.uuid) {
+                GattConstants.SPOOL_DATA_UUID -> {
+                    _spoolUpdates.tryEmit(BleDataParser.parseSpoolData(value))
                 }
-                uuid == GattConstants.ENV_DATA_UUID -> {
-                    _envData.value = BleDataParser.parseEnvData(value)
+                GattConstants.ENV_DATA_UUID -> {
+                    val env = BleDataParser.parseEnvData(value)
+                    // Ігноруємо пакет із нульовими значеннями (GATT ще не готовий)
+                    if (env != null && (env.temperature != 0f || env.humidity != 0f)) {
+                        _envData.value = env
+                    }
+                }
+                GattConstants.CONFIG_UUID -> {
+                    _configData.value = BleDataParser.parseConfig(value)
                 }
             }
         }
@@ -88,23 +117,45 @@ class BleManager @Inject constructor(
     private val centralCallback = object : BluetoothCentralManagerCallback() {
 
         override fun onConnectedPeripheral(peripheral: BluetoothPeripheral) {
+            wasManualDisconnect = false
+            connectingPeripheral = null
             connectedPeripheral = peripheral
-            _deviceName.value = peripheral.name ?: GattConstants.DEVICE_NAME
+            val peripheralName = peripheral.name
+            val name = if (!peripheralName.isNullOrEmpty()) {
+                prefs.edit().putString(PREF_LAST_NAME, peripheralName).apply()
+                peripheralName
+            } else {
+                prefs.getString(PREF_LAST_NAME, null) ?: GattConstants.DEVICE_NAME
+            }
+            _deviceName.value = name
             _deviceState.value = DeviceState.CONNECTING
+            prefs.edit().putString(PREF_LAST_MAC, peripheral.address).apply()
         }
 
         override fun onDisconnectedPeripheral(peripheral: BluetoothPeripheral, status: HciStatus) {
+            connectingPeripheral = null
             connectedPeripheral = null
-            _deviceState.value = DeviceState.DISCONNECTED
+            if (_deviceState.value != DeviceState.SCANNING) {
+                _deviceState.value = DeviceState.DISCONNECTED
+            }
             _envData.value = null
         }
 
-        override fun onDiscoveredPeripheral(peripheral: BluetoothPeripheral, scanResult: android.bluetooth.le.ScanResult) {
-            _scanResults.tryEmit(peripheral)
+        override fun onDiscoveredPeripheral(
+            peripheral: BluetoothPeripheral,
+            scanResult: android.bluetooth.le.ScanResult,
+        ) {
+            val count = _debugInfo.value.substringAfter("callbacks=").substringBefore(" ").toIntOrNull() ?: 0
+            _debugInfo.value = "callbacks=${count + 1} last=${peripheral.address}"
+            val advertisedUuids = scanResult.scanRecord?.serviceUuids?.map { it.uuid } ?: emptyList()
+            val isFilamentSense = advertisedUuids.contains(GattConstants.SERVICE_UUID)
+                    || peripheral.name == GattConstants.DEVICE_NAME
+            _scanResults.tryEmit(ScanEvent(peripheral, isFilamentSense))
         }
 
         override fun onScanFailed(scanFailure: ScanFailure) {
             _deviceState.value = DeviceState.DISCONNECTED
+            _scanFailure.value = scanFailure.name
         }
     }
 
@@ -115,6 +166,19 @@ class BleManager @Inject constructor(
     // ── Public API ───────────────────────────────────────────────────────────
 
     fun startScan() {
+        _scanFailure.value = null
+        _debugInfo.value = "starting…"
+        connectingPeripheral?.let { central.cancelConnection(it) }
+        connectingPeripheral = null
+
+        val btManager = context.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
+        val scanner = btManager.adapter?.bluetoothLeScanner
+        if (scanner == null) {
+            _debugInfo.value = "ERR: scanner=null (BT off?)"
+            _deviceState.value = DeviceState.DISCONNECTED
+            return
+        }
+        _debugInfo.value = "scanner=ok isScanning=${central.isScanning} callbacks=0"
         _deviceState.value = DeviceState.SCANNING
         central.scanForPeripherals()
     }
@@ -127,6 +191,7 @@ class BleManager @Inject constructor(
     }
 
     fun connect(peripheral: BluetoothPeripheral) {
+        connectingPeripheral = peripheral
         _deviceState.value = DeviceState.CONNECTING
         central.connectPeripheral(peripheral, peripheralCallback)
     }
@@ -136,18 +201,39 @@ class BleManager @Inject constructor(
         connect(peripheral)
     }
 
+    /** Швидке пряме підключення до останнього відомого MAC (без сканування). */
+    fun autoConnect() {
+        val mac = lastConnectedMac ?: return
+        connectByAddress(mac)
+    }
+
     fun disconnect() {
+        wasManualDisconnect = true
         connectedPeripheral?.let { central.cancelConnection(it) }
     }
 
     fun sendCommand(json: String) {
         val peripheral = connectedPeripheral ?: return
-        val bytes = json.toByteArray(Charsets.UTF_8)
-        peripheral.writeCharacteristic(
-            GattConstants.SERVICE_UUID,
-            GattConstants.CMD_UUID,
-            bytes,
-            WriteType.WITHOUT_RESPONSE,
-        )
+        try {
+            peripheral.writeCharacteristic(
+                GattConstants.SERVICE_UUID,
+                GattConstants.CMD_UUID,
+                json.toByteArray(Charsets.UTF_8),
+                WriteType.WITHOUT_RESPONSE,
+            )
+        } catch (_: Exception) {}
+    }
+
+    /** Записує JSON у CONFIG-характеристику (WITH_RESPONSE). */
+    fun writeConfig(json: String) {
+        val peripheral = connectedPeripheral ?: return
+        try {
+            peripheral.writeCharacteristic(
+                GattConstants.SERVICE_UUID,
+                GattConstants.CONFIG_UUID,
+                json.toByteArray(Charsets.UTF_8),
+                WriteType.WITH_RESPONSE,
+            )
+        } catch (_: Exception) {}
     }
 }

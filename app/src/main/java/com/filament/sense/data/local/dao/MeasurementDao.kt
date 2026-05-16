@@ -19,6 +19,16 @@ interface MeasurementDao {
     )
     fun getMeasurementsForSpool(spoolId: Int, sinceMs: Long): Flow<List<MeasurementEntity>>
 
-    @Query("DELETE FROM measurements WHERE timestamp < :beforeMs")
-    suspend fun deleteOlderThan(beforeMs: Long)
+    /** Видаляє найстаріші записи для конкретної котушки, залишаючи не більше [keepCount]. */
+    @Query(
+        """DELETE FROM measurements
+           WHERE spoolId = :spoolId
+           AND id NOT IN (
+               SELECT id FROM measurements
+               WHERE spoolId = :spoolId
+               ORDER BY timestamp DESC
+               LIMIT :keepCount
+           )"""
+    )
+    suspend fun trimSpoolToLimit(spoolId: Int, keepCount: Int)
 }

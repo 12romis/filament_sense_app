@@ -16,6 +16,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 
 /**
  * Рядок даних: іконка (teal) + мітка (OnSurfaceVariant) + значення (OnSurface) right-aligned.
@@ -32,28 +33,30 @@ fun DataRow(
     label: String,
     value: String,
     modifier: Modifier = Modifier,
+    fontSize: Int = 14,
     iconStyle: TextStyle? = null,
     onEdit: (() -> Unit)? = null,
 ) {
+    val textStyle = MaterialTheme.typography.bodyMedium.copy(fontSize = fontSize.sp)
     Row(
         modifier = modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(
             text = icon,
-            style = iconStyle ?: MaterialTheme.typography.bodyMedium,
+            style = iconStyle ?: textStyle,
             color = MaterialTheme.colorScheme.secondary,
         )
         Spacer(modifier = Modifier.width(8.dp))
         Text(
             text = label,
-            style = MaterialTheme.typography.bodyMedium,
+            style = textStyle,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.weight(1f),
         )
         Text(
             text = value,
-            style = MaterialTheme.typography.bodyMedium.copy(
+            style = textStyle.copy(
                 fontWeight = if (onEdit != null) androidx.compose.ui.text.font.FontWeight.Medium else androidx.compose.ui.text.font.FontWeight.Normal,
             ),
             color = MaterialTheme.colorScheme.onSurface,

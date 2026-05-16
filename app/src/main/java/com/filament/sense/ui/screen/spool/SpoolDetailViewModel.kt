@@ -8,6 +8,7 @@ import com.filament.sense.domain.usecase.GetMeasurementsUseCase
 import com.filament.sense.domain.usecase.GetSpoolByIdUseCase
 import com.filament.sense.domain.usecase.GetThresholdsUseCase
 import com.filament.sense.domain.usecase.SetActiveSpoolUseCase
+import com.filament.sense.domain.usecase.SendManualReportUseCase
 import com.filament.sense.domain.usecase.SetBaselineUseCase
 import com.filament.sense.domain.usecase.SetThresholdsUseCase
 import com.filament.sense.domain.usecase.UpdateSpoolConfigUseCase
@@ -25,6 +26,7 @@ data class SpoolDetailUiState(
     val thresholdWarning: Int = 500,
     val thresholdCritical: Int = 100,
     val thresholdEmpty: Int = 10,
+    val snackbarMessage: String? = null,
 )
 
 @HiltViewModel
@@ -34,6 +36,7 @@ class SpoolDetailViewModel @Inject constructor(
     private val getThresholds: GetThresholdsUseCase,
     private val setActiveSpool: SetActiveSpoolUseCase,
     private val setBaseline: SetBaselineUseCase,
+    private val sendManualReport: SendManualReportUseCase,
     private val setThresholds: SetThresholdsUseCase,
     private val updateConfig: UpdateSpoolConfigUseCase,
 ) : ViewModel() {
@@ -94,7 +97,21 @@ class SpoolDetailViewModel @Inject constructor(
     }
 
     fun saveBaseline(id: Int) {
-        viewModelScope.launch { setBaseline(id) }
+        viewModelScope.launch {
+            setBaseline(id)
+            _state.value = _state.value.copy(snackbarMessage = "Команду надіслано на пристрій")
+        }
+    }
+
+    fun sendReport() {
+        viewModelScope.launch {
+            sendManualReport()
+            _state.value = _state.value.copy(snackbarMessage = "Команду надіслано на пристрій")
+        }
+    }
+
+    fun clearSnackbar() {
+        _state.value = _state.value.copy(snackbarMessage = null)
     }
 
     fun updateSpoolConfig(id: Int, name: String, colorArgb: Int, nominalWeight: Int, baselineWeight: Float) {

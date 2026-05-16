@@ -58,6 +58,7 @@ import com.filament.sense.ui.theme.PrimaryContainer
 import com.filament.sense.ui.theme.StatusConnected
 import com.filament.sense.ui.theme.StatusConnectedBg
 import java.text.SimpleDateFormat
+import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 
@@ -113,34 +114,41 @@ fun HomeScreen(
             // поверненні зі ScanScreen поки StateFlow ще не оновився
             val isEmptyState = state.deviceState == DeviceState.DISCONNECTED ||
                                state.deviceState == DeviceState.SCANNING
+
             if (isEmptyState) {
-                // ── Empty state ──────────────────────────────────────────
-                EmptyDeviceState(onAddDevice = { navController.navigate(Screen.Scan.route) })
+                // ── Empty / disconnected state ───────────────────────────
+                if (state.hasLastMac) {
+                    ReconnectState(
+                        onReconnect = { viewModel.triggerReconnect() },
+                        onScan = { navController.navigate(Screen.Scan.route) },
+                    )
+                } else {
+                    EmptyDeviceState(onAddDevice = { navController.navigate(Screen.Scan.route) })
+                }
             } else {
                 // ── Device card ──────────────────────────────────────────
                 DeviceCard(
                     deviceName = state.deviceName.ifEmpty { "FilamentSense" },
                     deviceState = state.deviceState,
-                    activeSpool = state.activeSpool,
-                    onSpoolClick = {
-                        state.activeSpool?.let {
-                            navController.navigate(Screen.SpoolDetail.createRoute(it.id))
-                        }
-                    },
+                    lastSyncTimestamp = state.activeSpool?.syncTimestamp,
                     modifier = Modifier.padding(horizontal = 16.dp),
                 )
-
                 Spacer(modifier = Modifier.height(12.dp))
 
                 // ── Active spool card ────────────────────────────────────
                 state.activeSpool?.let { spool ->
                     ActiveSpoolCard(
                         spool = spool,
+                        onSpoolClick = {
+                            navController.navigate(Screen.SpoolDetail.createRoute(spool.id))
+                        },
                         modifier = Modifier.padding(horizontal = 16.dp),
                     )
                     Spacer(modifier = Modifier.height(12.dp))
                 }
+            }
 
+            if (!isEmptyState) {
                 // ── Env data ─────────────────────────────────────────────
                 state.envData?.let { env ->
                     EnvDataCard(
@@ -160,11 +168,83 @@ fun HomeScreen(
                 ) {
                     Text(
                         text = "Всі котушки  →",
-                        style = MaterialTheme.typography.labelLarge,
+                        style = MaterialTheme.typography.labelLarge.copy(fontSize = 15.sp),
                         color = MaterialTheme.colorScheme.primary,
                     )
                 }
             }
+        }
+    }
+}
+
+// ── Reconnect state (last MAC відомий, але пристрій недоступний) ─────────────
+
+@Composable
+private fun ReconnectState(
+    onReconnect: () -> Unit,
+    onScan: () -> Unit,
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 32.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Spacer(modifier = Modifier.height(10.dp))
+        Box(
+            modifier = Modifier.size(280.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            Image(
+                painter = painterResource(R.drawable.img_empty_ring_outer),
+                contentDescription = null,
+                modifier = Modifier.size(280.dp).alpha(0.5f),
+            )
+            Image(
+                painter = painterResource(R.drawable.img_empty_ring_inner),
+                contentDescription = null,
+                modifier = Modifier.size(240.dp).alpha(0.3f),
+            )
+            DeviceIllustration(modifier = Modifier.size(200.dp))
+        }
+        Text(
+            text = "Немає пристрою",
+            style = MaterialTheme.typography.titleLarge.copy(
+                fontWeight = FontWeight.Bold,
+                fontSize = 28.sp,
+            ),
+            color = MaterialTheme.colorScheme.primary,
+        )
+        Spacer(modifier = Modifier.height(12.dp))
+        Text(
+            text = "FilamentSense недоступний.\nПереконайтесь що пристрій увімкнено.",
+            style = MaterialTheme.typography.bodyMedium.copy(fontSize = 14.sp),
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center,
+        )
+        Spacer(modifier = Modifier.height(56.dp))
+        Button(
+            onClick = onReconnect,
+            modifier = Modifier.fillMaxWidth().height(48.dp),
+            shape = RoundedCornerShape(24.dp),
+            colors = ButtonDefaults.buttonColors(
+                containerColor = MaterialTheme.colorScheme.primary,
+                contentColor = MaterialTheme.colorScheme.onPrimary,
+            ),
+        ) {
+            Text("Підключити", style = MaterialTheme.typography.titleSmall.copy(fontSize = 15.sp))
+        }
+        Spacer(modifier = Modifier.height(8.dp))
+        Button(
+            onClick = onScan,
+            modifier = Modifier.fillMaxWidth().height(48.dp),
+            shape = RoundedCornerShape(24.dp),
+            colors = ButtonDefaults.buttonColors(
+                containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                contentColor = MaterialTheme.colorScheme.onSurface,
+            ),
+        ) {
+            Text("Шукати пристрій", style = MaterialTheme.typography.titleSmall.copy(fontSize = 15.sp))
         }
     }
 }
@@ -326,56 +406,74 @@ private fun DeviceIllustration(modifier: Modifier = Modifier) {
 private fun DeviceCard(
     deviceName: String,
     deviceState: DeviceState,
-    activeSpool: SpoolSlot?,
-    onSpoolClick: () -> Unit,
+    lastSyncTimestamp: Long?,
     modifier: Modifier = Modifier,
 ) {
-    Column(
+    val syncStr = lastSyncTimestamp?.let {
+        val date = Date(it)
+        val today = Calendar.getInstance()
+        val syncCal = Calendar.getInstance().apply { time = date }
+        val isToday = today.get(Calendar.YEAR) == syncCal.get(Calendar.YEAR) &&
+                      today.get(Calendar.DAY_OF_YEAR) == syncCal.get(Calendar.DAY_OF_YEAR)
+        val timeStr = SimpleDateFormat("HH:mm", Locale.getDefault()).format(date)
+        if (isToday) "сьогодні $timeStr"
+        else SimpleDateFormat("dd.MM.yyyy HH:mm", Locale.getDefault()).format(date)
+    }
+
+    Row(
         modifier = modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(16.dp))
             .background(MaterialTheme.colorScheme.surface)
             .padding(16.dp),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(
-            text = deviceName,
-            style = MaterialTheme.typography.titleMedium,
-            color = MaterialTheme.colorScheme.onSurface,
-        )
-        Text(
-            text = "ESP32-C6 · IoT Device",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        Spacer(modifier = Modifier.height(8.dp))
-        Row(
-            modifier = Modifier
-                .clip(RoundedCornerShape(13.dp))
-                .background(StatusConnectedBg)
-                .padding(horizontal = 8.dp, vertical = 4.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Box(
+        DeviceIllustration(modifier = Modifier.size(120.dp))
+        Spacer(modifier = Modifier.width(16.dp))
+        Column {
+            Text(
+                text = deviceName,
+                style = MaterialTheme.typography.titleMedium.copy(fontSize = 18.sp),
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+            Spacer(modifier = Modifier.height(2.dp))
+            Text(
+                text = "ESP32-C6 · IoT Device",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            if (syncStr != null) {
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(
+                    text = "Востаннє: $syncStr",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Spacer(modifier = Modifier.height(10.dp))
+            Row(
                 modifier = Modifier
-                    .size(8.dp)
-                    .clip(CircleShape)
-                    .background(StatusConnected),
-            )
-            Spacer(modifier = Modifier.width(6.dp))
-            Text(
-                text = "Підключено",
-                style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Medium),
-                color = StatusConnected,
-            )
-        }
-        activeSpool?.let { spool ->
-            Spacer(modifier = Modifier.height(12.dp))
-            Text(
-                text = "Котушка: ${spool.name.ifEmpty { "Котушка #${spool.id}" }}  →",
-                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium),
-                color = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.clickable(onClick = onSpoolClick),
-            )
+                    .clip(RoundedCornerShape(13.dp))
+                    .background(StatusConnectedBg)
+                    .padding(horizontal = 10.dp, vertical = 5.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(8.dp)
+                        .clip(CircleShape)
+                        .background(StatusConnected),
+                )
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(
+                    text = "Підключено",
+                    style = MaterialTheme.typography.bodySmall.copy(
+                        fontWeight = FontWeight.Medium,
+                        fontSize = 12.sp,
+                    ),
+                    color = StatusConnected,
+                )
+            }
         }
     }
 }
@@ -385,9 +483,10 @@ private fun DeviceCard(
 @Composable
 private fun ActiveSpoolCard(
     spool: SpoolSlot,
+    onSpoolClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val dateStr = spool.startDate?.let {
+    val dateStr = spool.baselineTimestamp?.let {
         SimpleDateFormat("dd.MM.yyyy", Locale.getDefault()).format(Date(it))
     } ?: "—"
 
@@ -396,65 +495,73 @@ private fun ActiveSpoolCard(
             .fillMaxWidth()
             .clip(RoundedCornerShape(16.dp))
             .background(MaterialTheme.colorScheme.surface)
+            .clickable(onClick = onSpoolClick)
             .padding(16.dp),
     ) {
-        Text(
-            text = "Активна котушка",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        Spacer(modifier = Modifier.height(8.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = "Активна котушка",
+                style = MaterialTheme.typography.bodyMedium.copy(fontSize = 14.sp),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.weight(1f),
+            )
+            Text(
+                text = "›",
+                style = MaterialTheme.typography.titleMedium.copy(fontSize = 22.sp),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        Spacer(modifier = Modifier.height(10.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {
             Box(
                 modifier = Modifier
-                    .size(12.dp)
+                    .size(14.dp)
                     .clip(CircleShape)
                     .background(Color(spool.colorArgb)),
             )
-            Spacer(modifier = Modifier.width(8.dp))
+            Spacer(modifier = Modifier.width(10.dp))
             Text(
                 text = spool.name.ifEmpty { "Котушка #${spool.id}" },
-                style = MaterialTheme.typography.titleSmall,
+                style = MaterialTheme.typography.titleSmall.copy(fontSize = 17.sp),
                 color = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.weight(1f),
             )
-            Box(
-                modifier = Modifier
-                    .clip(RoundedCornerShape(11.dp))
-                    .background(PrimaryContainer)
-                    .padding(horizontal = 8.dp, vertical = 3.dp),
-            ) {
-                Text(
-                    text = "✓ Активна",
-                    style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Medium),
-                    color = MaterialTheme.colorScheme.primary,
-                )
-            }
         }
-        Spacer(modifier = Modifier.height(10.dp))
+        Spacer(modifier = Modifier.height(12.dp))
         ThresholdBar(progress = spool.remainingPercent)
+        Spacer(modifier = Modifier.height(6.dp))
         Row(modifier = Modifier.fillMaxWidth()) {
             Text(
                 text = "${(spool.remainingPercent * 100).toInt()}% залишилось",
-                style = MaterialTheme.typography.bodySmall,
+                style = MaterialTheme.typography.bodySmall.copy(fontSize = 13.sp),
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.weight(1f),
             )
             Text(
                 text = "${spool.nominalWeightGrams} г",
-                style = MaterialTheme.typography.bodySmall,
+                style = MaterialTheme.typography.bodySmall.copy(fontSize = 13.sp),
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
         Spacer(modifier = Modifier.height(8.dp))
         HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f))
         Spacer(modifier = Modifier.height(8.dp))
-        DataRow(icon = "⚖", label = "Залишок", value = "${spool.remainingGrams.toInt()} г")
-        Spacer(modifier = Modifier.height(8.dp))
-        DataRow(icon = "◎", label = "Вага брутто", value = "${spool.grossWeightGrams.toInt()} г")
-        Spacer(modifier = Modifier.height(8.dp))
-        DataRow(icon = "📅", label = "Дата початку", value = dateStr)
-        Spacer(modifier = Modifier.height(8.dp))
-        DataRow(icon = "📦", label = "Номінал", value = "${spool.nominalWeightGrams} г")
+        DataRow(icon = "⚖️", label = "Залишок", value = "${spool.remainingGrams.toInt()} г", fontSize = 14)
+        Spacer(modifier = Modifier.height(10.dp))
+        DataRow(icon = "📦", label = "Вага брутто", value = "${spool.grossWeightGrams.toInt()} г", fontSize = 14)
+        Spacer(modifier = Modifier.height(10.dp))
+        val baselineStr = if (spool.baselineWeight > 0f) "${spool.baselineWeight.toInt()} г" else "—"
+        DataRow(icon = "📫", label = "Початкова вага брутто", value = baselineStr, fontSize = 14)
+        Spacer(modifier = Modifier.height(10.dp))
+        val syncStr = spool.syncTimestamp?.let {
+            SimpleDateFormat("dd.MM.yyyy HH:mm", Locale.getDefault()).format(Date(it))
+        } ?: "Не синхронізовано"
+        DataRow(icon = "🔄", label = "Синхронізовано", value = syncStr, fontSize = 14)
+        Spacer(modifier = Modifier.height(10.dp))
+        DataRow(icon = "📅", label = "Дата початку", value = dateStr, fontSize = 14)
+        Spacer(modifier = Modifier.height(10.dp))
+        DataRow(icon = "📦", label = "Номінал", value = "${spool.nominalWeightGrams} г", fontSize = 14)
     }
 }

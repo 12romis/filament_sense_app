@@ -7,6 +7,7 @@ import com.filament.sense.data.local.dao.MeasurementDao
 import com.filament.sense.data.local.dao.SpoolDao
 import com.filament.sense.data.local.entity.MeasurementEntity
 import com.filament.sense.data.local.entity.SpoolEntity
+import com.filament.sense.domain.model.ConfigData
 import com.filament.sense.domain.model.EnvData
 import com.filament.sense.domain.model.Measurement
 import com.filament.sense.domain.model.SpoolSlot
@@ -27,7 +28,7 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 private const val MEASUREMENT_INTERVAL_MS = 5 * 60 * 1000L
-private const val RETENTION_PERIOD_MS = 30L * 24 * 60 * 60 * 1000L
+private const val MEASUREMENTS_PER_SPOOL = 1000
 private const val PREF_THRESHOLD_WARNING = "threshold_warning"
 private const val PREF_THRESHOLD_CRITICAL = "threshold_critical"
 private const val PREF_THRESHOLD_EMPTY = "threshold_empty"
@@ -36,6 +37,9 @@ private data class BleSpoolData(
     val remainingGrams: Float,
     val grossWeightGrams: Float,
     val hasFilament: Boolean,
+    val baselineWeight: Float,
+    val baselineTimestamp: Long?,
+    val syncTimestamp: Long,
 )
 
 @Singleton
@@ -49,6 +53,7 @@ class SpoolRepositoryImpl @Inject constructor(
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     override val envData: StateFlow<EnvData?> = bleManager.envData
+    override val configData: StateFlow<ConfigData?> = bleManager.configData
 
     // Live BLE дані для активної котушки (null = немає підключення)
     private val _liveBleData = MutableStateFlow<BleSpoolData?>(null)
@@ -63,6 +68,9 @@ class SpoolRepositoryImpl @Inject constructor(
                         remainingGrams = live.remainingGrams,
                         grossWeightGrams = live.grossWeightGrams,
                         hasFilament = live.hasFilament,
+                        baselineWeight = live.baselineWeight,
+                        baselineTimestamp = live.baselineTimestamp,
+                        syncTimestamp = live.syncTimestamp,
                     )
                 } else domain
             }
@@ -80,10 +88,16 @@ class SpoolRepositoryImpl @Inject constructor(
     init {
         scope.launch {
             bleManager.spoolUpdates.collect { update ->
+                // grossWeightGrams == 0 означає неготовність GATT (ESP32 ще не виміряв
+                // після reconnect). Ігноруємо такі пакети щоб не затирати валідні дані.
+                if (update.grossWeightGrams <= 0f) return@collect
                 _liveBleData.value = BleSpoolData(
                     remainingGrams = update.remainingGrams,
                     grossWeightGrams = update.grossWeightGrams,
                     hasFilament = update.hasFilament,
+                    baselineWeight = update.baselineWeight,
+                    baselineTimestamp = update.baselineTimestamp,
+                    syncTimestamp = System.currentTimeMillis(),
                 )
             }
         }
@@ -102,7 +116,7 @@ class SpoolRepositoryImpl @Inject constructor(
                         humidity = env?.humidity,
                     )
                 )
-                measurementDao.deleteOlderThan(System.currentTimeMillis() - RETENTION_PERIOD_MS)
+                measurementDao.trimSpoolToLimit(active.id, MEASUREMENTS_PER_SPOOL)
             }
         }
     }
@@ -118,6 +132,14 @@ class SpoolRepositoryImpl @Inject constructor(
         bleManager.sendCommand(BleDataParser.buildSaveBaselineCmd(0))
     }
 
+    override suspend fun setMqttHost(host: String) {
+        bleManager.writeConfig(BleDataParser.buildSetMqttHostJson(host))
+    }
+
+    override suspend fun sendManualReport() {
+        bleManager.sendCommand(BleDataParser.buildManualReportCmd())
+    }
+
     override suspend fun createSpool(
         name: String,
         colorArgb: Int,
@@ -126,7 +148,7 @@ class SpoolRepositoryImpl @Inject constructor(
     ) {
         spoolDao.upsert(
             SpoolEntity(
-                id = 0, // auto-generate
+                id = 0,
                 name = name,
                 colorArgb = colorArgb,
                 nominalWeightGrams = nominalWeight,
@@ -134,6 +156,8 @@ class SpoolRepositoryImpl @Inject constructor(
                 startDate = System.currentTimeMillis(),
             )
         )
+        bleManager.sendCommand(BleDataParser.buildSetNameCmd(0, name))
+        bleManager.sendCommand(BleDataParser.buildSetTareCmd(0, baselineWeight, nominalWeight))
     }
 
     override suspend fun updateSpoolConfig(
@@ -156,9 +180,7 @@ class SpoolRepositoryImpl @Inject constructor(
             )
         )
         bleManager.sendCommand(BleDataParser.buildSetNameCmd(0, name))
-        if (baselineWeight > 0f) {
-            bleManager.sendCommand(BleDataParser.buildSetTareCmd(0, baselineWeight))
-        }
+        bleManager.sendCommand(BleDataParser.buildSetTareCmd(0, baselineWeight, nominalWeight))
     }
 
     override suspend fun deleteSpool(id: Int) {

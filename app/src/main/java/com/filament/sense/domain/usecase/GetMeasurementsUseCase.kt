@@ -8,7 +8,7 @@ import javax.inject.Inject
 class GetMeasurementsUseCase @Inject constructor(
     private val spoolRepository: SpoolRepository,
 ) {
-    /** Повертає вимірювання для [spoolId] за останні [periodMs] мілісекунд. */
-    operator fun invoke(spoolId: Int, periodMs: Long = 24 * 60 * 60 * 1000L): Flow<List<Measurement>> =
-        spoolRepository.getMeasurements(spoolId, System.currentTimeMillis() - periodMs)
+    /** Повертає всі збережені вимірювання для [spoolId] (до 1000 записів). */
+    operator fun invoke(spoolId: Int): Flow<List<Measurement>> =
+        spoolRepository.getMeasurements(spoolId, 0L)
 }

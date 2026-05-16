@@ -23,7 +23,9 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -63,9 +65,12 @@ import com.filament.sense.ui.components.BottomNav
 import com.filament.sense.ui.components.DataRow
 import com.filament.sense.ui.components.ThresholdBar
 import com.patrykandpatrick.vico.compose.cartesian.CartesianChartHost
+import com.patrykandpatrick.vico.compose.cartesian.axis.rememberBottom
 import com.patrykandpatrick.vico.compose.cartesian.layer.rememberLineCartesianLayer
 import com.patrykandpatrick.vico.compose.cartesian.rememberCartesianChart
+import com.patrykandpatrick.vico.core.cartesian.axis.HorizontalAxis
 import com.patrykandpatrick.vico.core.cartesian.data.CartesianChartModelProducer
+import com.patrykandpatrick.vico.core.cartesian.data.CartesianValueFormatter
 import com.patrykandpatrick.vico.core.cartesian.data.lineSeries
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
@@ -90,6 +95,13 @@ fun SpoolDetailScreen(
     val scope = rememberCoroutineScope()
 
     LaunchedEffect(id) { viewModel.loadSpool(id) }
+
+    LaunchedEffect(state.snackbarMessage) {
+        state.snackbarMessage?.let {
+            snackbarHostState.showSnackbar(it)
+            viewModel.clearSnackbar()
+        }
+    }
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
@@ -156,15 +168,18 @@ fun SpoolDetailScreen(
             ) {
                 Box(
                     modifier = Modifier
-                        .size(56.dp)
+                        .size(64.dp)
                         .clip(CircleShape)
                         .border(1.dp, MaterialTheme.colorScheme.primary, CircleShape)
                         .background(Color(spool.colorArgb)),
                 )
-                Spacer(modifier = Modifier.height(10.dp))
+                Spacer(modifier = Modifier.height(12.dp))
                 Text(
                     text = spool.name.ifEmpty { "Котушка #${id}" },
-                    style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Medium),
+                    style = MaterialTheme.typography.titleLarge.copy(
+                        fontWeight = FontWeight.Medium,
+                        fontSize = 24.sp,
+                    ),
                     color = MaterialTheme.colorScheme.onSurface,
                 )
             }
@@ -180,47 +195,53 @@ fun SpoolDetailScreen(
             ) {
                 Text(
                     text = "Основні дані",
-                    style = MaterialTheme.typography.bodyMedium,
+                    style = MaterialTheme.typography.bodyMedium.copy(fontSize = 15.sp),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 Text(
                     text = "${spool.remainingGrams.toInt()} г",
                     style = MaterialTheme.typography.titleLarge.copy(
                         fontWeight = FontWeight.Bold,
-                        fontSize = 28.sp,
+                        fontSize = 30.sp,
                     ),
                     color = MaterialTheme.colorScheme.primary,
                 )
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(10.dp))
                 ThresholdBar(progress = spool.remainingPercent)
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(8.dp))
                 Row(modifier = Modifier.fillMaxWidth()) {
                     Text(
                         text = "${(spool.remainingPercent * 100).toInt()}% залишилось",
-                        style = MaterialTheme.typography.bodySmall,
+                        style = MaterialTheme.typography.bodySmall.copy(fontSize = 13.sp),
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.weight(1f),
                     )
                     Text(
                         text = "${spool.nominalWeightGrams} г",
-                        style = MaterialTheme.typography.bodySmall,
+                        style = MaterialTheme.typography.bodySmall.copy(fontSize = 13.sp),
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
                 HorizontalDivider(
-                    modifier = Modifier.padding(vertical = 8.dp),
+                    modifier = Modifier.padding(vertical = 10.dp),
                     color = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f),
                 )
-                DataRow(icon = "⚖️", label = "Вага брутто поточна", value = "${spool.grossWeightGrams.toInt()} г")
-                Spacer(modifier = Modifier.height(8.dp))
-                DataRow(icon = "⚖️", label = "Вага брутто початкова", value = "${(spool.grossWeightGrams + spool.baselineWeight).toInt()} г")
-                Spacer(modifier = Modifier.height(8.dp))
-                val dateStr = spool.startDate?.let {
+                DataRow(icon = "📦", label = "Вага брутто", value = "${spool.grossWeightGrams.toInt()} г", fontSize = 14)
+                Spacer(modifier = Modifier.height(10.dp))
+                val baselineStr = if (spool.baselineWeight > 0f) "${spool.baselineWeight.toInt()} г" else "—"
+                DataRow(icon = "📫", label = "Початкова вага брутто", value = baselineStr, fontSize = 14)
+                Spacer(modifier = Modifier.height(10.dp))
+                val syncStr = spool.syncTimestamp?.let { ts ->
+                    SimpleDateFormat("dd.MM.yyyy HH:mm", Locale.getDefault()).format(Date(ts))
+                } ?: "Не синхронізовано"
+                DataRow(icon = "🔄", label = "Синхронізовано", value = syncStr, fontSize = 14)
+                Spacer(modifier = Modifier.height(10.dp))
+                val dateStr = spool.baselineTimestamp?.let {
                     SimpleDateFormat("dd.MM.yyyy", Locale.getDefault()).format(Date(it))
                 } ?: "—"
-                DataRow(icon = "📅", label = "Дата початку", value = dateStr)
-                Spacer(modifier = Modifier.height(8.dp))
-                DataRow(icon = "📦", label = "Номінальна вага", value = "${spool.nominalWeightGrams} г")
+                DataRow(icon = "📅", label = "Дата початку", value = dateStr, fontSize = 14)
+                Spacer(modifier = Modifier.height(10.dp))
+                DataRow(icon = "📦", label = "Номінальна вага", value = "${spool.nominalWeightGrams} г", fontSize = 14)
             }
 
             Spacer(modifier = Modifier.height(12.dp))
@@ -238,25 +259,28 @@ fun SpoolDetailScreen(
             ) {
                 Text(
                     text = "Пороги сповіщень",
-                    style = MaterialTheme.typography.bodyMedium,
+                    style = MaterialTheme.typography.bodyMedium.copy(fontSize = 15.sp),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 HorizontalDivider(
-                    modifier = Modifier.padding(vertical = 8.dp),
+                    modifier = Modifier.padding(vertical = 10.dp),
                     color = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f),
                 )
                 DataRow(
                     icon = "⚠️", label = ThresholdType.WARNING.label, value = "${state.thresholdWarning} г",
+                    fontSize = 14,
                     onEdit = { editingThreshold = ThresholdType.WARNING; editingValue = state.thresholdWarning.toString() },
                 )
-                Spacer(modifier = Modifier.height(6.dp))
+                Spacer(modifier = Modifier.height(10.dp))
                 DataRow(
                     icon = "🔴", label = ThresholdType.CRITICAL.label, value = "${state.thresholdCritical} г",
+                    fontSize = 14,
                     onEdit = { editingThreshold = ThresholdType.CRITICAL; editingValue = state.thresholdCritical.toString() },
                 )
-                Spacer(modifier = Modifier.height(6.dp))
+                Spacer(modifier = Modifier.height(10.dp))
                 DataRow(
                     icon = "💀", label = ThresholdType.EMPTY.label, value = "${state.thresholdEmpty} г",
+                    fontSize = 14,
                     onEdit = { editingThreshold = ThresholdType.EMPTY; editingValue = state.thresholdEmpty.toString() },
                 )
             }
@@ -330,6 +354,57 @@ fun SpoolDetailScreen(
 
             Spacer(modifier = Modifier.height(12.dp))
 
+            // ── Команди (тільки для активної котушки) ───────────────────
+            if (spool.isActive) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp)
+                        .clip(RoundedCornerShape(16.dp))
+                        .background(MaterialTheme.colorScheme.surface)
+                        .padding(16.dp),
+                ) {
+                    Text(
+                        text = "Команди",
+                        style = MaterialTheme.typography.bodyMedium.copy(fontSize = 15.sp),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    HorizontalDivider(
+                        modifier = Modifier.padding(vertical = 10.dp),
+                        color = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f),
+                    )
+                    OutlinedButton(
+                        onClick = { viewModel.saveBaseline(spool.id) },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.outlinedButtonColors(
+                            contentColor = MaterialTheme.colorScheme.primary,
+                        ),
+                        border = androidx.compose.foundation.BorderStroke(
+                            1.dp, MaterialTheme.colorScheme.primary,
+                        ),
+                    ) {
+                        Text("Зберегти baseline")
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedButton(
+                        onClick = { viewModel.sendReport() },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.outlinedButtonColors(
+                            contentColor = MaterialTheme.colorScheme.secondary,
+                        ),
+                        border = androidx.compose.foundation.BorderStroke(
+                            1.dp, MaterialTheme.colorScheme.secondary,
+                        ),
+                    ) {
+                        Text("Надіслати звіт у Telegram")
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+            }
+
             // ── Active toggle ────────────────────────────────────────────
             Row(
                 modifier = Modifier
@@ -342,7 +417,10 @@ fun SpoolDetailScreen(
             ) {
                 Text(
                     text = "Активна котушка для пристрою",
-                    style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium),
+                    style = MaterialTheme.typography.bodyMedium.copy(
+                        fontWeight = FontWeight.Medium,
+                        fontSize = 15.sp,
+                    ),
                     color = MaterialTheme.colorScheme.onSurface,
                     modifier = Modifier.weight(1f),
                 )
@@ -405,6 +483,8 @@ fun SpoolDetailScreen(
 
 // ── Weight history chart (Vico) ───────────────────────────────────────────────
 
+private val DAY_MS = 24L * 60 * 60 * 1000
+
 @Composable
 private fun WeightHistoryChart(
     measurements: List<Measurement>,
@@ -412,11 +492,37 @@ private fun WeightHistoryChart(
 ) {
     val modelProducer = remember { CartesianChartModelProducer() }
 
+    // Зберігаємо базовий timestamp, щоб X-значення були малими числами
+    // (уникаємо втрати точності при конвертації Long → Float всередині Vico)
+    val baseTimestamp = remember(measurements) {
+        if (measurements.isNotEmpty()) measurements.first().timestamp else 0L
+    }
+
     LaunchedEffect(measurements) {
         if (measurements.size >= 2) {
             modelProducer.runTransaction {
-                lineSeries { series(measurements.map { it.remainingGrams.toDouble() }) }
+                lineSeries {
+                    series(
+                        x = measurements.map { (it.timestamp - baseTimestamp).toDouble() },
+                        y = measurements.map { it.remainingGrams.toDouble() },
+                    )
+                }
             }
+        }
+    }
+
+    // Формат мітки залежить від діапазону: < 1 дня → HH:mm, інакше → dd.MM
+    val axisFormatter = remember(measurements) {
+        if (measurements.size < 2) {
+            CartesianValueFormatter.decimal()
+        } else {
+            val rangeMs = measurements.last().timestamp - measurements.first().timestamp
+            val sdf = if (rangeMs < DAY_MS) {
+                SimpleDateFormat("HH:mm", Locale.getDefault())
+            } else {
+                SimpleDateFormat("dd.MM", Locale.getDefault())
+            }
+            CartesianValueFormatter { _, value, _ -> sdf.format(Date(baseTimestamp + value.toLong())) }
         }
     }
 
@@ -429,7 +535,7 @@ private fun WeightHistoryChart(
     ) {
         Text(
             text = "Динаміка зміни залишку",
-            style = MaterialTheme.typography.bodyMedium,
+            style = MaterialTheme.typography.bodyMedium.copy(fontSize = 15.sp),
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         Spacer(modifier = Modifier.height(8.dp))
@@ -452,11 +558,15 @@ private fun WeightHistoryChart(
             CartesianChartHost(
                 chart = rememberCartesianChart(
                     rememberLineCartesianLayer(),
+                    bottomAxis = HorizontalAxis.rememberBottom(
+                        valueFormatter = axisFormatter,
+                        labelRotationDegrees = -45f,
+                    ),
                 ),
                 modelProducer = modelProducer,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(140.dp),
+                    .height(160.dp),
             )
         }
     }

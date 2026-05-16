@@ -3,6 +3,7 @@ package com.filament.sense.ui.screen.spools
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -42,10 +43,37 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
-// Preset colors for the spool color picker (Figma 26:64–73)
+// Palette for the spool color picker — popular filament colors
 private val presetColors = listOf(
-    Color.White, Color.Black, Color.Red, Color(0xFFFF8C00), Color(0xFFFFD700),
-    Color(0xFF00C853), Color(0xFF1565C0), Color(0xFF6A1B9A), Color(0xFF78909C), Color(0xFF795548),
+    // Нейтральні
+    Color.White,
+    Color(0xFFBDBDBD), // silver
+    Color(0xFF616161), // gray
+    Color(0xFF212121), // charcoal
+    Color.Black,
+    Color(0xFF795548), // brown
+    Color(0xFFD7CCC8), // beige / wood
+    // Теплі
+    Color(0xFFFF1744), // red
+    Color(0xFFFF6D00), // deep orange
+    Color(0xFFFF9100), // orange
+    Color(0xFFFFD740), // amber
+    Color(0xFFFFFF00), // yellow
+    // Зелені / бірюзові
+    Color(0xFF00E676), // green
+    Color(0xFFCCFF90), // light green (glow)
+    Color(0xFF1DE9B6), // mint / teal
+    Color(0xFF00B0FF), // sky blue
+    // Сині / фіолетові
+    Color(0xFF2979FF), // blue
+    Color(0xFF651FFF), // deep purple
+    Color(0xFFD500F9), // violet
+    // Рожеві / малинові
+    Color(0xFFFF4081), // hot pink
+    Color(0xFFFF80AB), // pink
+    Color(0xFFF48FB1), // baby pink
+    Color(0xFFE040FB), // orchid / lilac
+    Color(0xFFEA80FC), // lavender
 )
 
 // Preset nominal weights
@@ -144,22 +172,24 @@ fun SpoolFormScreen(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 Spacer(modifier = Modifier.height(8.dp))
-                Row {
-                    presetColors.forEach { color ->
-                        val isSelected = state.colorArgb == color.toArgb()
-                        Box(
-                            modifier = Modifier
-                                .size(22.dp)
-                                .clip(CircleShape)
-                                .then(
-                                    if (isSelected) Modifier.border(2.dp, MaterialTheme.colorScheme.primary, CircleShape)
-                                    else Modifier
-                                )
-                                .background(color)
-                                .clickable { onColorChange(color.toArgb()) },
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
+                presetColors.chunked(8).forEach { rowColors ->
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        rowColors.forEach { color ->
+                            val isSelected = state.colorArgb == color.toArgb()
+                            Box(
+                                modifier = Modifier
+                                    .size(28.dp)
+                                    .clip(CircleShape)
+                                    .then(
+                                        if (isSelected) Modifier.border(2.5.dp, MaterialTheme.colorScheme.primary, CircleShape)
+                                        else Modifier
+                                    )
+                                    .background(color)
+                                    .clickable { onColorChange(color.toArgb()) },
+                            )
+                        }
                     }
+                    Spacer(modifier = Modifier.height(8.dp))
                 }
             }
 
@@ -231,7 +261,7 @@ fun SpoolFormScreen(
             OutlinedTextField(
                 value = if (state.baselineWeightGrams > 0f) state.baselineWeightGrams.toInt().toString() else "",
                 onValueChange = { v -> onBaselineWeightChange(v.toFloatOrNull() ?: 0f) },
-                label = { Text("Вага порожньої котушки (г)") },
+                label = { Text("Початкова вага брутто (г)") },
                 placeholder = { Text("Не враховувати") },
                 modifier = Modifier
                     .fillMaxWidth()
@@ -251,7 +281,16 @@ fun SpoolFormScreen(
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
             )
 
-            Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(16.dp))
+
+            Text(
+                text = "При збереженні Номінальна вага та Початкова вага брутто будуть також перезаписані на підключеному пристрої FilamentSense",
+                style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(horizontal = 16.dp),
+            )
+
+            Spacer(modifier = Modifier.height(12.dp))
 
             Button(
                 onClick = onSave,

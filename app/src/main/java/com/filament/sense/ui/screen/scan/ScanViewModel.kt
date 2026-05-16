@@ -4,7 +4,9 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.filament.sense.data.ble.BleManager
 import com.filament.sense.domain.model.DeviceState
+import com.filament.sense.domain.model.SpoolSlot
 import com.filament.sense.domain.repository.DeviceRepository
+import com.filament.sense.domain.repository.SpoolRepository
 import com.welie.blessed.BluetoothPeripheral
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -17,6 +19,11 @@ data class ScanUiState(
     val isScanning: Boolean = false,
     val isConnecting: Boolean = false,
     val devices: List<ScannedDevice> = emptyList(),
+    val activeSpool: SpoolSlot? = null,
+    val scanError: String? = null,
+    val debugInfo: String = "",
+    /** Пристрій, підключення до якого очікує підтвердження в діалозі. */
+    val pendingConnectDevice: ScannedDevice? = null,
 )
 
 data class ScannedDevice(
@@ -31,6 +38,7 @@ data class ScannedDevice(
 class ScanViewModel @Inject constructor(
     private val deviceRepo: DeviceRepository,
     private val bleManager: BleManager,
+    private val spoolRepo: SpoolRepository,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(ScanUiState())
@@ -46,21 +54,54 @@ class ScanViewModel @Inject constructor(
             }
         }
         viewModelScope.launch {
-            bleManager.scanResults.collect { peripheral ->
+            bleManager.scanResults.collect { event ->
                 val existing = _state.value.devices
-                val alreadyAdded = existing.any { it.address == peripheral.address }
-                if (!alreadyAdded) {
+                if (existing.none { it.address == event.peripheral.address }) {
+                    val name = event.peripheral.name
+                        ?: if (event.isFilamentSense) com.filament.sense.data.ble.GattConstants.DEVICE_NAME else null
                     val device = ScannedDevice(
-                        address = peripheral.address,
-                        name = peripheral.name ?: "Unknown",
-                        rssi = -70, // rssi недоступний з BluetoothPeripheral; ScanResult не проксується через BleManager
-                        isFilamentSense = peripheral.name == com.filament.sense.data.ble.GattConstants.DEVICE_NAME,
-                        peripheral = peripheral,
+                        address = event.peripheral.address,
+                        name = name ?: event.peripheral.address,
+                        rssi = -70,
+                        isFilamentSense = event.isFilamentSense,
+                        peripheral = event.peripheral,
                     )
                     _state.value = _state.value.copy(devices = existing + device)
                 }
             }
         }
+        viewModelScope.launch {
+            bleManager.scanFailure.collect { error ->
+                _state.value = _state.value.copy(scanError = error)
+            }
+        }
+        viewModelScope.launch {
+            bleManager.debugInfo.collect { info ->
+                _state.value = _state.value.copy(debugInfo = info)
+            }
+        }
+        viewModelScope.launch {
+            spoolRepo.spools.collect { spools ->
+                _state.value = _state.value.copy(activeSpool = spools.firstOrNull { it.isActive })
+            }
+        }
+    }
+
+    /** Ініціює з'єднання: спочатку показує діалог підтвердження. */
+    fun requestConnect(device: ScannedDevice) {
+        _state.value = _state.value.copy(pendingConnectDevice = device)
+    }
+
+    /** Підтверджує підключення після діалогу. */
+    fun confirmConnect() {
+        val device = _state.value.pendingConnectDevice ?: return
+        _state.value = _state.value.copy(pendingConnectDevice = null)
+        viewModelScope.launch { deviceRepo.connectToDevice(device.address) }
+    }
+
+    /** Скасовує діалог підтвердження. */
+    fun cancelConnect() {
+        _state.value = _state.value.copy(pendingConnectDevice = null)
     }
 
     fun startScan() {
@@ -72,12 +113,8 @@ class ScanViewModel @Inject constructor(
         deviceRepo.stopScan()
     }
 
-    fun connect(device: ScannedDevice) {
-        viewModelScope.launch { deviceRepo.connectToDevice(device.address) }
-    }
-
     override fun onCleared() {
         super.onCleared()
-        deviceRepo.stopScan() // синхронний виклик — не потребує корутини
+        deviceRepo.stopScan()
     }
 }

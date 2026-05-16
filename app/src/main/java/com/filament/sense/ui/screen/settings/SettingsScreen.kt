@@ -17,22 +17,35 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
@@ -42,6 +55,7 @@ import androidx.navigation.NavController
 import com.filament.sense.domain.model.DeviceState
 import com.filament.sense.ui.components.BottomNav
 import com.filament.sense.ui.components.StatusBadge
+import com.filament.sense.ui.navigation.Screen
 import com.filament.sense.ui.theme.StatusConnected
 import com.filament.sense.ui.theme.StatusConnectedBg
 
@@ -52,14 +66,13 @@ fun SettingsScreen(
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
+    val snackbarHostState = remember { SnackbarHostState() }
+    val focusManager = LocalFocusManager.current
 
     val notificationPermissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
-    ) { granted ->
-        viewModel.toggleNotifications(granted)
-    }
+    ) { granted -> viewModel.toggleNotifications(granted) }
 
-    // If OS permission was revoked externally — force-disable; otherwise respect saved preference
     LaunchedEffect(Unit) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             val granted = ContextCompat.checkSelfPermission(
@@ -69,8 +82,18 @@ fun SettingsScreen(
         }
     }
 
+    LaunchedEffect(state.snackbarMessage) {
+        state.snackbarMessage?.let {
+            snackbarHostState.showSnackbar(it)
+            viewModel.clearSnackbar()
+        }
+    }
+
+    val isConnected = state.deviceState == DeviceState.CONNECTED
+
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         bottomBar = {
             BottomNav(
                 currentRoute = "settings",
@@ -80,8 +103,9 @@ fun SettingsScreen(
     ) { innerPadding ->
         Column(
             modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding),
+                .fillMaxWidth()
+                .padding(innerPadding)
+                .verticalScroll(rememberScrollState()),
         ) {
             // App bar
             Box(
@@ -98,25 +122,8 @@ fun SettingsScreen(
                 )
             }
 
-            // ── Device card ──────────────────────────────────────────────
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp)
-                    .clip(RoundedCornerShape(16.dp))
-                    .background(MaterialTheme.colorScheme.surface)
-                    .padding(16.dp),
-            ) {
-                Text(
-                    text = "Пристрій",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                HorizontalDivider(
-                    modifier = Modifier.padding(vertical = 10.dp),
-                    color = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f),
-                )
-                // Device info row
+            // ── Картка Пристрій ──────────────────────────────────────────
+            SettingsCard(title = "Пристрій") {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Box(
                         modifier = Modifier
@@ -128,8 +135,7 @@ fun SettingsScreen(
                         Text(
                             text = "F",
                             style = MaterialTheme.typography.bodyMedium.copy(
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 16.sp,
+                                fontWeight = FontWeight.Bold, fontSize = 16.sp,
                             ),
                             color = MaterialTheme.colorScheme.primary,
                         )
@@ -139,18 +145,19 @@ fun SettingsScreen(
                         Text(
                             text = state.deviceName.ifEmpty { "FilamentSense" },
                             style = MaterialTheme.typography.bodyMedium.copy(
-                                fontWeight = FontWeight.Medium,
-                                fontSize = 15.sp,
+                                fontWeight = FontWeight.Medium, fontSize = 15.sp,
                             ),
                             color = MaterialTheme.colorScheme.onSurface,
                         )
-                        Text(
-                            text = "ESP32-C6",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
+                        state.mac?.let {
+                            Text(
+                                text = it,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
                     }
-                    if (state.deviceState == DeviceState.CONNECTED) {
+                    if (isConnected) {
                         StatusBadge(
                             label = "Підключено",
                             dotColor = StatusConnected,
@@ -159,7 +166,11 @@ fun SettingsScreen(
                         )
                     } else {
                         StatusBadge(
-                            label = "Не підключено",
+                            label = when (state.deviceState) {
+                                DeviceState.SCANNING -> "Пошук..."
+                                DeviceState.CONNECTING -> "Підключення..."
+                                else -> "Не підключено"
+                            },
                             dotColor = MaterialTheme.colorScheme.onSurfaceVariant,
                             textColor = MaterialTheme.colorScheme.onSurfaceVariant,
                             containerColor = MaterialTheme.colorScheme.surfaceVariant,
@@ -167,11 +178,12 @@ fun SettingsScreen(
                     }
                 }
 
-                if (state.deviceState == DeviceState.CONNECTED) {
-                    HorizontalDivider(
-                        modifier = Modifier.padding(vertical = 10.dp),
-                        color = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f),
-                    )
+                HorizontalDivider(
+                    modifier = Modifier.padding(vertical = 10.dp),
+                    color = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f),
+                )
+
+                if (isConnected) {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -190,29 +202,81 @@ fun SettingsScreen(
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
+                } else {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { navController.navigate(Screen.Scan.route) },
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            text = "Підключити пристрій",
+                            style = MaterialTheme.typography.bodyMedium.copy(fontSize = 14.sp),
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.weight(1f),
+                        )
+                        Text(
+                            text = "›",
+                            style = MaterialTheme.typography.titleMedium.copy(fontSize = 20.sp),
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+                    }
                 }
             }
 
             Spacer(modifier = Modifier.height(12.dp))
 
-            // ── App card ─────────────────────────────────────────────────
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp)
-                    .clip(RoundedCornerShape(16.dp))
-                    .background(MaterialTheme.colorScheme.surface)
-                    .padding(16.dp),
-            ) {
+            // ── Картка MQTT Bambu ────────────────────────────────────────
+            SettingsCard(title = "MQTT Bambu") {
                 Text(
-                    text = "Застосунок",
-                    style = MaterialTheme.typography.bodyMedium,
+                    text = "IP принтера Bambu P1S",
+                    style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-                HorizontalDivider(
-                    modifier = Modifier.padding(vertical = 8.dp),
-                    color = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f),
+                Spacer(modifier = Modifier.height(8.dp))
+                OutlinedTextField(
+                    value = state.draftMqttHost,
+                    onValueChange = viewModel::onMqttHostDraftChange,
+                    enabled = isConnected,
+                    placeholder = { Text("192.168.1.100") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = MaterialTheme.colorScheme.primary,
+                        unfocusedBorderColor = MaterialTheme.colorScheme.surfaceVariant,
+                    ),
                 )
+                Spacer(modifier = Modifier.height(8.dp))
+                Button(
+                    onClick = {
+                        focusManager.clearFocus()
+                        viewModel.saveMqttHost()
+                    },
+                    enabled = isConnected && state.isMqttHostDirty,
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.primary,
+                        contentColor = MaterialTheme.colorScheme.onPrimary,
+                    ),
+                ) {
+                    Text("Зберегти")
+                }
+                if (!isConnected) {
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = "Доступно при підключеному пристрої",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // ── Картка Застосунок ────────────────────────────────────────
+            SettingsCard(title = "Застосунок") {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
                         text = "Версія",
@@ -260,53 +324,33 @@ fun SettingsScreen(
                 }
             }
 
-            Spacer(modifier = Modifier.height(12.dp))
-
-            // ── Coming soon card ─────────────────────────────────────────
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp)
-                    .clip(RoundedCornerShape(16.dp))
-                    .background(MaterialTheme.colorScheme.surface)
-                    .padding(16.dp),
-            ) {
-                Text(
-                    text = "Незабаром",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                HorizontalDivider(
-                    modifier = Modifier.padding(vertical = 8.dp),
-                    color = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f),
-                )
-                ComingSoonRow("⚙ Калібрування ваги")
-                HorizontalDivider(
-                    modifier = Modifier.padding(vertical = 8.dp),
-                    color = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f),
-                )
-                ComingSoonRow("📊 Історичний лог")
-            }
+            Spacer(modifier = Modifier.height(16.dp))
         }
     }
 }
 
 @Composable
-private fun ComingSoonRow(label: String) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically,
+private fun SettingsCard(
+    title: String,
+    content: @Composable () -> Unit,
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp)
+            .clip(RoundedCornerShape(16.dp))
+            .background(MaterialTheme.colorScheme.surface)
+            .padding(16.dp),
     ) {
         Text(
-            text = label,
+            text = title,
             style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.outline,
-            modifier = Modifier.weight(1f),
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
-        Text(
-            text = "скоро",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.outline,
+        HorizontalDivider(
+            modifier = Modifier.padding(vertical = 10.dp),
+            color = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f),
         )
+        content()
     }
 }

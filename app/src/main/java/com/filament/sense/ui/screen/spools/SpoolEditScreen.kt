@@ -5,6 +5,7 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -25,6 +26,10 @@ fun SpoolEditScreen(
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
 
+    LaunchedEffect(viewModel) {
+        viewModel.navigateBack.collect { navController.popBackStack() }
+    }
+
     SpoolFormScreen(
         title = "Редагування котушки",
         saveLabel = "Зберегти зміни",
@@ -33,10 +38,7 @@ fun SpoolEditScreen(
         onColorChange = viewModel::onColorChange,
         onNominalWeightChange = viewModel::onNominalWeightChange,
         onBaselineWeightChange = viewModel::onBaselineWeightChange,
-        onSave = {
-            viewModel.save()
-            navController.popBackStack()
-        },
+        onSave = { viewModel.save() },
         onBack = { navController.popBackStack() },
         onDelete = {
             if (state.isActive) {

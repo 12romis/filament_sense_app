@@ -7,8 +7,11 @@ import com.filament.sense.domain.usecase.DeleteSpoolUseCase
 import com.filament.sense.domain.usecase.GetSpoolsUseCase
 import com.filament.sense.domain.usecase.UpdateSpoolConfigUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -26,6 +29,9 @@ class SpoolEditViewModel @Inject constructor(
 
     private val _state = MutableStateFlow(SpoolFormUiState())
     val state: StateFlow<SpoolFormUiState> = _state.asStateFlow()
+
+    private val _navigateBack = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+    val navigateBack: SharedFlow<Unit> = _navigateBack.asSharedFlow()
 
     init {
         viewModelScope.launch {
@@ -55,6 +61,7 @@ class SpoolEditViewModel @Inject constructor(
                 nominalWeight = s.nominalWeightGrams,
                 baselineWeight = s.baselineWeightGrams,
             )
+            _navigateBack.emit(Unit)
         }
     }
 

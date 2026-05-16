@@ -1,8 +1,11 @@
 package com.filament.sense.ui.screen.scan
 
 import android.Manifest
+import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Build
+import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.core.LinearEasing
@@ -28,10 +31,18 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -41,7 +52,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
@@ -50,13 +60,10 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
+import com.filament.sense.domain.model.SpoolSlot
 import com.filament.sense.ui.navigation.Screen
 import com.filament.sense.ui.theme.OnPrimary
 import com.filament.sense.ui.theme.PrimaryContainer
@@ -69,14 +76,14 @@ fun ScanScreen(
     val state by viewModel.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
 
-    // BLE runtime permissions — потрібні на Android 12+ (API 31+)
     val blePermissions = remember {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            arrayOf(
-                Manifest.permission.BLUETOOTH_SCAN,
-                Manifest.permission.BLUETOOTH_CONNECT,
-            )
-        } else emptyArray()
+        buildList {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                add(Manifest.permission.BLUETOOTH_SCAN)
+                add(Manifest.permission.BLUETOOTH_CONNECT)
+            }
+            add(Manifest.permission.ACCESS_FINE_LOCATION)
+        }.toTypedArray()
     }
 
     var permissionDenied by remember { mutableStateOf(false) }
@@ -88,7 +95,6 @@ fun ScanScreen(
         else permissionDenied = true
     }
 
-    // Зупиняємо сканування при виході з екрану (до очищення ViewModel)
     DisposableEffect(Unit) {
         onDispose { viewModel.stopScan() }
     }
@@ -99,6 +105,24 @@ fun ScanScreen(
         }
         if (allGranted) viewModel.startScan()
         else permissionLauncher.launch(blePermissions)
+    }
+
+    // ── Pre-connect dialog ───────────────────────────────────────────────────
+    state.pendingConnectDevice?.let { device ->
+        ConnectConfirmDialog(
+            activeSpool = state.activeSpool,
+            onConfirm = {
+                viewModel.confirmConnect()
+                navController.navigate(Screen.Home.route) {
+                    popUpTo(Screen.Home.route) { inclusive = true }
+                }
+            },
+            onCancel = viewModel::cancelConnect,
+            onGoToSpools = {
+                viewModel.cancelConnect()
+                navController.navigate(Screen.SpoolList.route)
+            },
+        )
     }
 
     Scaffold(containerColor = MaterialTheme.colorScheme.background) { innerPadding ->
@@ -132,31 +156,37 @@ fun ScanScreen(
             }
 
             if (permissionDenied) {
-                // ── Відмовлено у дозволах ──────────────────────────────
+                // ── Відмовлено у дозволах ────────────────────────────────
                 Box(
                     modifier = Modifier.fillMaxSize(),
                     contentAlignment = Alignment.Center,
                 ) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Text(
-                            text = "Потрібен дозвіл на Bluetooth",
+                            text = "Дозволи Bluetooth обов'язкові для пошуку пристрою",
                             style = MaterialTheme.typography.titleMedium,
                             color = MaterialTheme.colorScheme.onSurface,
                             textAlign = TextAlign.Center,
                             modifier = Modifier.padding(horizontal = 32.dp),
                         )
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text(
-                            text = "Надайте дозвіл у Налаштуваннях застосунку",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            textAlign = TextAlign.Center,
-                            modifier = Modifier.padding(horizontal = 32.dp),
-                        )
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Button(
+                            onClick = {
+                                val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                                    data = Uri.fromParts("package", context.packageName, null)
+                                }
+                                context.startActivity(intent)
+                            },
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = MaterialTheme.colorScheme.primary,
+                                contentColor = MaterialTheme.colorScheme.onPrimary,
+                            ),
+                        ) {
+                            Text("Відкрити налаштування")
+                        }
                     }
                 }
             } else {
-                // ── Radar animation ──────────────────────────────────────
                 Text(
                     text = "Пошук пристроїв...",
                     style = MaterialTheme.typography.bodyMedium.copy(fontSize = 16.sp),
@@ -168,9 +198,19 @@ fun ScanScreen(
 
                 RadarAnimation(modifier = Modifier.align(Alignment.CenterHorizontally))
 
+                if (state.debugInfo.isNotEmpty()) {
+                    Text(
+                        text = "DBG: ${state.debugInfo}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.tertiary,
+                        modifier = Modifier
+                            .align(Alignment.CenterHorizontally)
+                            .padding(horizontal = 16.dp, vertical = 4.dp),
+                    )
+                }
+
                 Spacer(modifier = Modifier.height(24.dp))
 
-                // ── Device list ──────────────────────────────────────────
                 Text(
                     text = "Знайдені пристрої",
                     style = MaterialTheme.typography.bodyMedium,
@@ -186,18 +226,21 @@ fun ScanScreen(
                     items(state.devices) { device ->
                         ScannedDeviceItem(
                             device = device,
-                            onConnect = {
-                                viewModel.connect(device)
-                                navController.navigate(Screen.Home.route) {
-                                    popUpTo(Screen.Home.route) { inclusive = true }
-                                }
-                            },
+                            onConnect = { viewModel.requestConnect(device) },
                         )
                         Spacer(modifier = Modifier.height(8.dp))
                     }
                 }
 
                 Spacer(modifier = Modifier.height(8.dp))
+                state.scanError?.let { error ->
+                    Text(
+                        text = "Помилка сканування: $error",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.padding(horizontal = 16.dp),
+                    )
+                }
                 Text(
                     text = "Переконайтесь що пристрій увімкнено",
                     style = MaterialTheme.typography.bodySmall,
@@ -206,6 +249,86 @@ fun ScanScreen(
                 )
             }
         }
+    }
+}
+
+// ── Pre-connect dialog ────────────────────────────────────────────────────────
+
+@Composable
+private fun ConnectConfirmDialog(
+    activeSpool: SpoolSlot?,
+    onConfirm: () -> Unit,
+    onCancel: () -> Unit,
+    onGoToSpools: () -> Unit,
+) {
+    if (activeSpool != null) {
+        // Випадок A: є активна котушка
+        AlertDialog(
+            onDismissRequest = onCancel,
+            title = { Text("Активна котушка", style = MaterialTheme.typography.titleMedium) },
+            text = {
+                Column {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            modifier = Modifier
+                                .size(10.dp)
+                                .clip(CircleShape)
+                                .background(Color(activeSpool.colorArgb)),
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "Дані з FilamentSense будуть писатись у «${activeSpool.name.ifEmpty { "Котушка #${activeSpool.id}" }}». Підтвердити підключення?",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                    TextButton(
+                        onClick = onGoToSpools,
+                        modifier = Modifier.align(Alignment.End),
+                    ) {
+                        Text("Змінити активну котушку", color = MaterialTheme.colorScheme.primary)
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = onConfirm) {
+                    Text("Підтвердити", color = MaterialTheme.colorScheme.primary)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = onCancel) {
+                    Text("Скасувати", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            },
+            containerColor = MaterialTheme.colorScheme.surface,
+            shape = RoundedCornerShape(28.dp),
+        )
+    } else {
+        // Випадок B: немає активної котушки
+        AlertDialog(
+            onDismissRequest = onCancel,
+            title = { Text("Немає активної котушки", style = MaterialTheme.typography.titleMedium) },
+            text = {
+                Text(
+                    text = "Спершу зробіть котушку активною. Дані з пристрою будуть писатись у неї.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = onGoToSpools) {
+                    Text("До котушок", color = MaterialTheme.colorScheme.primary)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = onCancel) {
+                    Text("Скасувати", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            },
+            containerColor = MaterialTheme.colorScheme.surface,
+            shape = RoundedCornerShape(28.dp),
+        )
     }
 }
 
@@ -317,7 +440,7 @@ private fun ScannedDeviceItem(
                         else MaterialTheme.colorScheme.onSurface,
             )
             Text(
-                text = "ESP32-C6 · ${device.rssi} dBm",
+                text = "${device.address} · ${device.rssi} dBm",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )

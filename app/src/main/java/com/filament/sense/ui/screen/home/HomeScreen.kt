@@ -57,6 +57,7 @@ import com.filament.sense.ui.navigation.Screen
 import com.filament.sense.ui.theme.PrimaryContainer
 import com.filament.sense.ui.theme.StatusConnected
 import com.filament.sense.ui.theme.StatusConnectedBg
+import com.filament.sense.ui.util.formatWeight
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
@@ -451,10 +452,16 @@ private fun DeviceCard(
                 )
             }
             Spacer(modifier = Modifier.height(10.dp))
+            val badgeBg = if (deviceState == DeviceState.CONNECTED) StatusConnectedBg
+                          else Color(0xFF1A2A1A)
+            val badgeDot = if (deviceState == DeviceState.CONNECTED) StatusConnected
+                           else Color(0xFFFFB300)
+            val badgeText = if (deviceState == DeviceState.CONNECTED) "Активний"
+                            else "Підключається..."
             Row(
                 modifier = Modifier
                     .clip(RoundedCornerShape(13.dp))
-                    .background(StatusConnectedBg)
+                    .background(badgeBg)
                     .padding(horizontal = 10.dp, vertical = 5.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
@@ -462,16 +469,16 @@ private fun DeviceCard(
                     modifier = Modifier
                         .size(8.dp)
                         .clip(CircleShape)
-                        .background(StatusConnected),
+                        .background(badgeDot),
                 )
                 Spacer(modifier = Modifier.width(6.dp))
                 Text(
-                    text = "Підключено",
+                    text = badgeText,
                     style = MaterialTheme.typography.bodySmall.copy(
                         fontWeight = FontWeight.Medium,
                         fontSize = 12.sp,
                     ),
-                    color = StatusConnected,
+                    color = badgeDot,
                 )
             }
         }
@@ -540,7 +547,7 @@ private fun ActiveSpoolCard(
                 modifier = Modifier.weight(1f),
             )
             Text(
-                text = "${spool.nominalWeightGrams} г",
+                text = "${spool.nominalWeightGrams.formatWeight()} г",
                 style = MaterialTheme.typography.bodySmall.copy(fontSize = 13.sp),
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -548,11 +555,11 @@ private fun ActiveSpoolCard(
         Spacer(modifier = Modifier.height(8.dp))
         HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f))
         Spacer(modifier = Modifier.height(8.dp))
-        DataRow(icon = "⚖️", label = "Залишок", value = "${spool.remainingGrams.toInt()} г", fontSize = 14)
+        DataRow(icon = "⚖️", label = "Залишок", value = "${spool.remainingGrams.toInt().formatWeight()} г", fontSize = 14)
         Spacer(modifier = Modifier.height(10.dp))
-        DataRow(icon = "📦", label = "Вага брутто", value = "${spool.grossWeightGrams.toInt()} г", fontSize = 14)
+        DataRow(icon = "📦", label = "Вага брутто", value = "${spool.grossWeightGrams.toInt().formatWeight()} г", fontSize = 14)
         Spacer(modifier = Modifier.height(10.dp))
-        val baselineStr = if (spool.baselineWeight > 0f) "${spool.baselineWeight.toInt()} г" else "—"
+        val baselineStr = if (spool.baselineWeight > 0f) "${spool.baselineWeight.toInt().formatWeight()} г" else "—"
         DataRow(icon = "📫", label = "Початкова вага брутто", value = baselineStr, fontSize = 14)
         Spacer(modifier = Modifier.height(10.dp))
         val syncStr = spool.syncTimestamp?.let {
@@ -562,6 +569,6 @@ private fun ActiveSpoolCard(
         Spacer(modifier = Modifier.height(10.dp))
         DataRow(icon = "📅", label = "Дата початку", value = dateStr, fontSize = 14)
         Spacer(modifier = Modifier.height(10.dp))
-        DataRow(icon = "📦", label = "Номінал", value = "${spool.nominalWeightGrams} г", fontSize = 14)
+        DataRow(icon = "📦", label = "Номінал", value = "${spool.nominalWeightGrams.formatWeight()} г", fontSize = 14)
     }
 }

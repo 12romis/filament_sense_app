@@ -27,6 +27,7 @@ import androidx.compose.ui.unit.dp
 import com.filament.sense.domain.model.SpoolSlot
 import com.filament.sense.ui.theme.PrimaryContainer
 import com.filament.sense.ui.theme.StatusConnected
+import com.filament.sense.ui.util.formatWeight
 
 /**
  * Рядок котушки у списку. Figma node 18:43+.
@@ -44,7 +45,7 @@ fun SpoolListItem(
 ) {
     val isActive = spool.isActive
     val remainingText = if (spool.hasFilament) {
-        "${spool.remainingGrams.toInt()} г залишилось"
+        "${spool.remainingGrams.toInt().formatWeight()} г залишилось"
     } else {
         "Порожня"
     }
@@ -113,7 +114,6 @@ fun SpoolListItem(
                 ThresholdBar(
                     progress = spool.remainingPercent,
                     fillColor = progressColor,
-                    modifier = Modifier.height(6.dp),
                 )
             }
             Spacer(modifier = Modifier.width(10.dp))

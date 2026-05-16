@@ -16,4 +16,6 @@ interface DeviceRepository {
     suspend fun disconnect()
     /** Пряме підключення до останнього відомого MAC без сканування. */
     fun autoConnect()
+    /** Скасовує поточну спробу підключення (timeout-скасування, не ручне відключення). */
+    fun cancelConnection()
 }

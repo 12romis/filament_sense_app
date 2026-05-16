@@ -64,11 +64,14 @@ import com.filament.sense.domain.model.Measurement
 import com.filament.sense.ui.components.BottomNav
 import com.filament.sense.ui.components.DataRow
 import com.filament.sense.ui.components.ThresholdBar
+import com.filament.sense.ui.util.formatWeight
 import com.patrykandpatrick.vico.compose.cartesian.CartesianChartHost
 import com.patrykandpatrick.vico.compose.cartesian.axis.rememberBottom
+import com.patrykandpatrick.vico.compose.cartesian.axis.rememberStart
 import com.patrykandpatrick.vico.compose.cartesian.layer.rememberLineCartesianLayer
 import com.patrykandpatrick.vico.compose.cartesian.rememberCartesianChart
 import com.patrykandpatrick.vico.core.cartesian.axis.HorizontalAxis
+import com.patrykandpatrick.vico.core.cartesian.axis.VerticalAxis
 import com.patrykandpatrick.vico.core.cartesian.data.CartesianChartModelProducer
 import com.patrykandpatrick.vico.core.cartesian.data.CartesianValueFormatter
 import com.patrykandpatrick.vico.core.cartesian.data.lineSeries
@@ -199,7 +202,7 @@ fun SpoolDetailScreen(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 Text(
-                    text = "${spool.remainingGrams.toInt()} г",
+                    text = "${spool.remainingGrams.toInt().formatWeight()} г",
                     style = MaterialTheme.typography.titleLarge.copy(
                         fontWeight = FontWeight.Bold,
                         fontSize = 30.sp,
@@ -217,7 +220,7 @@ fun SpoolDetailScreen(
                         modifier = Modifier.weight(1f),
                     )
                     Text(
-                        text = "${spool.nominalWeightGrams} г",
+                        text = "${spool.nominalWeightGrams.formatWeight()} г",
                         style = MaterialTheme.typography.bodySmall.copy(fontSize = 13.sp),
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -226,9 +229,9 @@ fun SpoolDetailScreen(
                     modifier = Modifier.padding(vertical = 10.dp),
                     color = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f),
                 )
-                DataRow(icon = "📦", label = "Вага брутто", value = "${spool.grossWeightGrams.toInt()} г", fontSize = 14)
+                DataRow(icon = "📦", label = "Вага брутто", value = "${spool.grossWeightGrams.toInt().formatWeight()} г", fontSize = 14)
                 Spacer(modifier = Modifier.height(10.dp))
-                val baselineStr = if (spool.baselineWeight > 0f) "${spool.baselineWeight.toInt()} г" else "—"
+                val baselineStr = if (spool.baselineWeight > 0f) "${spool.baselineWeight.toInt().formatWeight()} г" else "—"
                 DataRow(icon = "📫", label = "Початкова вага брутто", value = baselineStr, fontSize = 14)
                 Spacer(modifier = Modifier.height(10.dp))
                 val syncStr = spool.syncTimestamp?.let { ts ->
@@ -241,7 +244,7 @@ fun SpoolDetailScreen(
                 } ?: "—"
                 DataRow(icon = "📅", label = "Дата початку", value = dateStr, fontSize = 14)
                 Spacer(modifier = Modifier.height(10.dp))
-                DataRow(icon = "📦", label = "Номінальна вага", value = "${spool.nominalWeightGrams} г", fontSize = 14)
+                DataRow(icon = "📦", label = "Номінальна вага", value = "${spool.nominalWeightGrams.formatWeight()} г", fontSize = 14)
             }
 
             Spacer(modifier = Modifier.height(12.dp))
@@ -267,19 +270,19 @@ fun SpoolDetailScreen(
                     color = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f),
                 )
                 DataRow(
-                    icon = "⚠️", label = ThresholdType.WARNING.label, value = "${state.thresholdWarning} г",
+                    icon = "⚠️", label = ThresholdType.WARNING.label, value = "${state.thresholdWarning.formatWeight()} г",
                     fontSize = 14,
                     onEdit = { editingThreshold = ThresholdType.WARNING; editingValue = state.thresholdWarning.toString() },
                 )
                 Spacer(modifier = Modifier.height(10.dp))
                 DataRow(
-                    icon = "🔴", label = ThresholdType.CRITICAL.label, value = "${state.thresholdCritical} г",
+                    icon = "🔴", label = ThresholdType.CRITICAL.label, value = "${state.thresholdCritical.formatWeight()} г",
                     fontSize = 14,
                     onEdit = { editingThreshold = ThresholdType.CRITICAL; editingValue = state.thresholdCritical.toString() },
                 )
                 Spacer(modifier = Modifier.height(10.dp))
                 DataRow(
-                    icon = "💀", label = ThresholdType.EMPTY.label, value = "${state.thresholdEmpty} г",
+                    icon = "💀", label = ThresholdType.EMPTY.label, value = "${state.thresholdEmpty.formatWeight()} г",
                     fontSize = 14,
                     onEdit = { editingThreshold = ThresholdType.EMPTY; editingValue = state.thresholdEmpty.toString() },
                 )
@@ -492,18 +495,14 @@ private fun WeightHistoryChart(
 ) {
     val modelProducer = remember { CartesianChartModelProducer() }
 
-    // Зберігаємо базовий timestamp, щоб X-значення були малими числами
-    // (уникаємо втрати точності при конвертації Long → Float всередині Vico)
-    val baseTimestamp = remember(measurements) {
-        if (measurements.isNotEmpty()) measurements.first().timestamp else 0L
-    }
-
     LaunchedEffect(measurements) {
         if (measurements.size >= 2) {
             modelProducer.runTransaction {
                 lineSeries {
+                    // X = індекс точки (0, 1, 2...) — надійно без проблем з точністю Float.
+                    // Форматер відображає реальний час через measurements[index].
                     series(
-                        x = measurements.map { (it.timestamp - baseTimestamp).toDouble() },
+                        x = measurements.indices.map { it.toDouble() },
                         y = measurements.map { it.remainingGrams.toDouble() },
                     )
                 }
@@ -512,7 +511,7 @@ private fun WeightHistoryChart(
     }
 
     // Формат мітки залежить від діапазону: < 1 дня → HH:mm, інакше → dd.MM
-    val axisFormatter = remember(measurements) {
+    val xFormatter = remember(measurements) {
         if (measurements.size < 2) {
             CartesianValueFormatter.decimal()
         } else {
@@ -522,8 +521,15 @@ private fun WeightHistoryChart(
             } else {
                 SimpleDateFormat("dd.MM", Locale.getDefault())
             }
-            CartesianValueFormatter { _, value, _ -> sdf.format(Date(baseTimestamp + value.toLong())) }
+            CartesianValueFormatter { _, value, _ ->
+                val idx = value.toInt().coerceIn(measurements.indices)
+                sdf.format(Date(measurements[idx].timestamp))
+            }
         }
+    }
+
+    val yFormatter = remember {
+        CartesianValueFormatter { _, value, _ -> "${value.toInt().formatWeight()} г" }
     }
 
     Column(
@@ -558,15 +564,18 @@ private fun WeightHistoryChart(
             CartesianChartHost(
                 chart = rememberCartesianChart(
                     rememberLineCartesianLayer(),
+                    startAxis = VerticalAxis.rememberStart(
+                        valueFormatter = yFormatter,
+                    ),
                     bottomAxis = HorizontalAxis.rememberBottom(
-                        valueFormatter = axisFormatter,
+                        valueFormatter = xFormatter,
                         labelRotationDegrees = -45f,
                     ),
                 ),
                 modelProducer = modelProducer,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(160.dp),
+                    .height(180.dp),
             )
         }
     }

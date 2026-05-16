@@ -22,4 +22,5 @@ class DeviceRepositoryImpl @Inject constructor(
     override suspend fun connectToDevice(address: String) = bleManager.connectByAddress(address)
     override suspend fun disconnect() = bleManager.disconnect()
     override fun autoConnect() = bleManager.autoConnect()
+    override fun cancelConnection() = bleManager.cancelConnection()
 }

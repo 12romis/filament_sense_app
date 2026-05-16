@@ -204,7 +204,18 @@ class BleManager @Inject constructor(
     /** Швидке пряме підключення до останнього відомого MAC (без сканування). */
     fun autoConnect() {
         val mac = lastConnectedMac ?: return
+        // Скасовуємо попередню спробу якщо вона ще активна (щоб не було паралельних запитів)
+        connectingPeripheral?.let { central.cancelConnection(it) }
         connectByAddress(mac)
+    }
+
+    /**
+     * Скасовує поточну спробу підключення без виставлення [wasManualDisconnect].
+     * Використовується для timeout-скасування з HomeViewModel.
+     */
+    fun cancelConnection() {
+        connectingPeripheral?.let { central.cancelConnection(it) }
+        connectedPeripheral?.let { central.cancelConnection(it) }
     }
 
     fun disconnect() {

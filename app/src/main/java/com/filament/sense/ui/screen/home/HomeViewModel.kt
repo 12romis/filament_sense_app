@@ -9,6 +9,7 @@ import com.filament.sense.domain.repository.DeviceRepository
 import com.filament.sense.domain.repository.SpoolRepository
 import com.filament.sense.domain.usecase.GetSpoolsUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -17,7 +18,8 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
-private const val AUTO_RECONNECT_TIMEOUT_MS = 10_000L
+/** Час очікування успішного підключення. Якщо CONNECTING довше — скасовуємо. */
+private const val CONNECT_TIMEOUT_MS = 15_000L
 
 data class HomeUiState(
     val deviceState: DeviceState = DeviceState.DISCONNECTED,
@@ -41,19 +43,16 @@ class HomeViewModel @Inject constructor(
     private val _state = MutableStateFlow(HomeUiState())
     val state: StateFlow<HomeUiState> = _state.asStateFlow()
 
+    /** Job таймауту підключення — скасовується при успішному connect або новому виклику. */
+    private var connectTimeoutJob: Job? = null
+
     init {
         val hasLastMac = deviceRepo.lastConnectedMac != null
 
         // Тихе пряме підключення без сканування (якщо є відомий MAC і не ручне відключення)
         if (hasLastMac && deviceRepo.deviceState.value == DeviceState.DISCONNECTED
             && !deviceRepo.wasManualDisconnect) {
-            deviceRepo.autoConnect()
-            viewModelScope.launch {
-                delay(AUTO_RECONNECT_TIMEOUT_MS)
-                if (_state.value.deviceState == DeviceState.DISCONNECTED) {
-                    _state.value = _state.value.copy(showReconnectCta = true)
-                }
-            }
+            startAutoConnect()
         }
 
         viewModelScope.launch {
@@ -70,24 +69,26 @@ class HomeViewModel @Inject constructor(
                 Triple(deviceState, deviceName, spools)
             }.collect { (deviceState, deviceName, spools) ->
                 val current = _state.value
-                // Несподіваний розрив — одразу намагаємось перепідключитись (не при ручному відключенні)
-                if (deviceState == DeviceState.DISCONNECTED &&
+
+                when {
+                    // Успішне підключення — скасовуємо таймаут
+                    deviceState == DeviceState.CONNECTED -> {
+                        connectTimeoutJob?.cancel()
+                        connectTimeoutJob = null
+                    }
+                    // Несподіваний розрив із CONNECTED → авторепідключення
+                    deviceState == DeviceState.DISCONNECTED &&
                     current.deviceState == DeviceState.CONNECTED &&
-                    hasLastMac && !deviceRepo.wasManualDisconnect) {
-                    deviceRepo.autoConnect()
-                    viewModelScope.launch {
-                        delay(AUTO_RECONNECT_TIMEOUT_MS)
-                        if (_state.value.deviceState == DeviceState.DISCONNECTED) {
-                            _state.value = _state.value.copy(showReconnectCta = true)
-                        }
+                    hasLastMac && !deviceRepo.wasManualDisconnect -> {
+                        startAutoConnect()
                     }
                 }
+
                 _state.value = current.copy(
                     deviceState = deviceState,
                     deviceName = deviceName,
                     spools = spools,
                     activeSpool = spools.firstOrNull { it.isActive },
-                    // При успішному підключенні — прибрати CTA
                     showReconnectCta = if (deviceState == DeviceState.CONNECTED) false
                                       else current.showReconnectCta,
                     hasLastMac = hasLastMac,
@@ -96,9 +97,26 @@ class HomeViewModel @Inject constructor(
         }
     }
 
+    /**
+     * Запускає autoConnect + таймаут 15 с.
+     * Якщо за цей час стан не перейшов у CONNECTED — скасовуємо підключення,
+     * BleManager викличе onDisconnectedPeripheral → стан → DISCONNECTED → показуємо CTA.
+     */
+    private fun startAutoConnect() {
+        connectTimeoutJob?.cancel()
+        deviceRepo.autoConnect()
+        connectTimeoutJob = viewModelScope.launch {
+            delay(CONNECT_TIMEOUT_MS)
+            if (_state.value.deviceState == DeviceState.CONNECTING) {
+                deviceRepo.cancelConnection()
+                _state.value = _state.value.copy(showReconnectCta = true)
+            }
+        }
+    }
+
     fun triggerReconnect() {
         if (deviceRepo.lastConnectedMac != null) {
-            deviceRepo.autoConnect()
+            startAutoConnect()
         }
     }
 }

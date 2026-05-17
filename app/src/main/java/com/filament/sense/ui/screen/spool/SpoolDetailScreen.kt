@@ -63,18 +63,10 @@ import androidx.navigation.NavController
 import com.filament.sense.domain.model.Measurement
 import com.filament.sense.ui.components.BottomNav
 import com.filament.sense.ui.components.DataRow
+import com.filament.sense.ui.components.EnvDataCard
 import com.filament.sense.ui.components.ThresholdBar
+import com.filament.sense.ui.components.WeightHistoryChart
 import com.filament.sense.ui.util.formatWeight
-import com.patrykandpatrick.vico.compose.cartesian.CartesianChartHost
-import com.patrykandpatrick.vico.compose.cartesian.axis.rememberBottom
-import com.patrykandpatrick.vico.compose.cartesian.axis.rememberStart
-import com.patrykandpatrick.vico.compose.cartesian.layer.rememberLineCartesianLayer
-import com.patrykandpatrick.vico.compose.cartesian.rememberCartesianChart
-import com.patrykandpatrick.vico.core.cartesian.axis.HorizontalAxis
-import com.patrykandpatrick.vico.core.cartesian.axis.VerticalAxis
-import com.patrykandpatrick.vico.core.cartesian.data.CartesianChartModelProducer
-import com.patrykandpatrick.vico.core.cartesian.data.CartesianValueFormatter
-import com.patrykandpatrick.vico.core.cartesian.data.lineSeries
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -349,6 +341,14 @@ fun SpoolDetailScreen(
 
             Spacer(modifier = Modifier.height(12.dp))
 
+            state.envData?.let { env ->
+                EnvDataCard(
+                    envData = env,
+                    modifier = Modifier.padding(horizontal = 16.dp),
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+            }
+
             // ── History chart ────────────────────────────────────────────
             WeightHistoryChart(
                 measurements = state.measurements,
@@ -484,99 +484,3 @@ fun SpoolDetailScreen(
     }
 }
 
-// ── Weight history chart (Vico) ───────────────────────────────────────────────
-
-private val DAY_MS = 24L * 60 * 60 * 1000
-
-@Composable
-private fun WeightHistoryChart(
-    measurements: List<Measurement>,
-    modifier: Modifier = Modifier,
-) {
-    val modelProducer = remember { CartesianChartModelProducer() }
-
-    LaunchedEffect(measurements) {
-        if (measurements.size >= 2) {
-            modelProducer.runTransaction {
-                lineSeries {
-                    // X = індекс точки (0, 1, 2...) — надійно без проблем з точністю Float.
-                    // Форматер відображає реальний час через measurements[index].
-                    series(
-                        x = measurements.indices.map { it.toDouble() },
-                        y = measurements.map { it.remainingGrams.toDouble() },
-                    )
-                }
-            }
-        }
-    }
-
-    // Формат мітки залежить від діапазону: < 1 дня → HH:mm, інакше → dd.MM
-    val xFormatter = remember(measurements) {
-        if (measurements.size < 2) {
-            CartesianValueFormatter.decimal()
-        } else {
-            val rangeMs = measurements.last().timestamp - measurements.first().timestamp
-            val sdf = if (rangeMs < DAY_MS) {
-                SimpleDateFormat("HH:mm", Locale.getDefault())
-            } else {
-                SimpleDateFormat("dd.MM", Locale.getDefault())
-            }
-            CartesianValueFormatter { _, value, _ ->
-                val idx = value.toInt().coerceIn(measurements.indices)
-                sdf.format(Date(measurements[idx].timestamp))
-            }
-        }
-    }
-
-    val yFormatter = remember {
-        CartesianValueFormatter { _, value, _ -> "${value.toInt().formatWeight()} г" }
-    }
-
-    Column(
-        modifier = modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp))
-            .background(MaterialTheme.colorScheme.surface)
-            .padding(16.dp),
-    ) {
-        Text(
-            text = "Динаміка зміни залишку",
-            style = MaterialTheme.typography.bodyMedium.copy(fontSize = 15.sp),
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        Spacer(modifier = Modifier.height(8.dp))
-
-        if (measurements.size < 2) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(120.dp),
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(
-                    text = "Недостатньо даних\n(вимірювання кожні 5 хв)",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    textAlign = TextAlign.Center,
-                )
-            }
-        } else {
-            CartesianChartHost(
-                chart = rememberCartesianChart(
-                    rememberLineCartesianLayer(),
-                    startAxis = VerticalAxis.rememberStart(
-                        valueFormatter = yFormatter,
-                    ),
-                    bottomAxis = HorizontalAxis.rememberBottom(
-                        valueFormatter = xFormatter,
-                        labelRotationDegrees = -45f,
-                    ),
-                ),
-                modelProducer = modelProducer,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(180.dp),
-            )
-        }
-    }
-}

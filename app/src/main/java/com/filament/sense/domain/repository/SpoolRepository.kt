@@ -24,4 +24,7 @@ interface SpoolRepository {
     suspend fun sendManualReport()
 
     fun getMeasurements(spoolId: Int, sinceMs: Long): Flow<List<Measurement>>
+
+    /** Усереднені вимірювання по 8-годинних кошиках за останні [sinceMs] мс. */
+    fun getBucketedMeasurements(spoolId: Int, sinceMs: Long): Flow<List<Measurement>>
 }

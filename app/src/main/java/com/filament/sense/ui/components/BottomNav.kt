@@ -58,7 +58,7 @@ fun BottomNav(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(80.dp),
+                .height(60.dp),
         ) {
             navItems.forEach { item ->
                 val selected = currentRoute == item.route

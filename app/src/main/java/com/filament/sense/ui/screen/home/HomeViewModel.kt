@@ -4,9 +4,11 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.filament.sense.domain.model.DeviceState
 import com.filament.sense.domain.model.EnvData
+import com.filament.sense.domain.model.Measurement
 import com.filament.sense.domain.model.SpoolSlot
 import com.filament.sense.domain.repository.DeviceRepository
 import com.filament.sense.domain.repository.SpoolRepository
+import com.filament.sense.domain.usecase.GetMeasurementsUseCase
 import com.filament.sense.domain.usecase.GetSpoolsUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
@@ -15,6 +17,10 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -27,6 +33,7 @@ data class HomeUiState(
     val spools: List<SpoolSlot> = emptyList(),
     val activeSpool: SpoolSlot? = null,
     val envData: EnvData? = null,
+    val activeMeasurements: List<Measurement> = emptyList(),
     /** true = тихий auto-reconnect не вдався, показати CTA "Шукати пристрій" */
     val showReconnectCta: Boolean = false,
     /** true = є збережений MAC для прямого підключення */
@@ -36,6 +43,7 @@ data class HomeUiState(
 @HiltViewModel
 class HomeViewModel @Inject constructor(
     private val getSpools: GetSpoolsUseCase,
+    private val getMeasurements: GetMeasurementsUseCase,
     private val deviceRepo: DeviceRepository,
     private val spoolRepo: SpoolRepository,
 ) : ViewModel() {
@@ -94,6 +102,21 @@ class HomeViewModel @Inject constructor(
                     hasLastMac = hasLastMac,
                 )
             }
+        }
+
+        // Відстежуємо активну котушку; при зміні перепідписуємось на її bucketed measurements
+        viewModelScope.launch {
+            @Suppress("OPT_IN_USAGE")
+            getSpools()
+                .map { spools -> spools.firstOrNull { it.isActive }?.id }
+                .distinctUntilChanged()
+                .flatMapLatest { spoolId ->
+                    if (spoolId == null) flowOf(emptyList())
+                    else getMeasurements(spoolId)
+                }
+                .collect { measurements ->
+                    _state.value = _state.value.copy(activeMeasurements = measurements)
+                }
         }
     }
 

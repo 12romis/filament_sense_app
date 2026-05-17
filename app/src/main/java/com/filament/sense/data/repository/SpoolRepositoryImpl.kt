@@ -29,6 +29,12 @@ import javax.inject.Singleton
 
 private const val MEASUREMENT_INTERVAL_MS = 5 * 60 * 1000L
 private const val MEASUREMENTS_PER_SPOOL = 1000
+
+private const val BUCKET_8H_MS      = 8L  * 60 * 60 * 1000L  // розмір кошика для агрегації
+private const val COMPACT_AFTER_MS  = 24L * 60 * 60 * 1000L  // ущільнювати дані старші за 24 год
+private const val COMPACT_PERIOD_MS = 8L  * 60 * 60 * 1000L  // запускати ущільнення кожні 8 год
+const val HISTORY_WINDOW_MS         = 30L * 24 * 60 * 60 * 1000L // вікно для home-графіку (30 днів)
+
 private const val PREF_THRESHOLD_WARNING = "threshold_warning"
 private const val PREF_THRESHOLD_CRITICAL = "threshold_critical"
 private const val PREF_THRESHOLD_EMPTY = "threshold_empty"
@@ -119,6 +125,18 @@ class SpoolRepositoryImpl @Inject constructor(
                 measurementDao.trimSpoolToLimit(active.id, MEASUREMENTS_PER_SPOOL)
             }
         }
+
+        // Ущільнення: для даних старших за 24 год залишаємо лише один запис на 8-год кошик.
+        // Це дозволяє зберігати ~30 днів history в тому ж ліміті рядків (≈90 + 288 ≤ 1000).
+        scope.launch {
+            while (true) {
+                val cutoff = System.currentTimeMillis() - COMPACT_AFTER_MS
+                spoolDao.getAllSpools().first().forEach { entity ->
+                    measurementDao.compactOldMeasurements(entity.id, cutoff, BUCKET_8H_MS)
+                }
+                delay(COMPACT_PERIOD_MS)
+            }
+        }
     }
 
     override suspend fun setActiveSpool(id: Int) {
@@ -203,6 +221,20 @@ class SpoolRepositoryImpl @Inject constructor(
     override fun getMeasurements(spoolId: Int, sinceMs: Long): Flow<List<Measurement>> =
         measurementDao.getMeasurementsForSpool(spoolId, sinceMs)
             .map { entities -> entities.map { it.toDomain() } }
+
+    override fun getBucketedMeasurements(spoolId: Int, sinceMs: Long): Flow<List<Measurement>> =
+        measurementDao.getBucketedMeasurements(spoolId, sinceMs, BUCKET_8H_MS)
+            .map { buckets ->
+                buckets.map { b ->
+                    Measurement(
+                        spoolIndex = b.spoolId,
+                        remainingGrams = b.remainingGrams,
+                        temperature = null,
+                        humidity = null,
+                        timestamp = b.timestamp,
+                    )
+                }
+            }
 
     private fun SpoolEntity.toDomain() = SpoolSlot(
         id = id,

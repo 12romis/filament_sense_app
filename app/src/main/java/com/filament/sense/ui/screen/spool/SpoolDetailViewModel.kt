@@ -2,8 +2,10 @@ package com.filament.sense.ui.screen.spool
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.filament.sense.domain.model.EnvData
 import com.filament.sense.domain.model.Measurement
 import com.filament.sense.domain.model.SpoolSlot
+import com.filament.sense.domain.repository.SpoolRepository
 import com.filament.sense.domain.usecase.GetMeasurementsUseCase
 import com.filament.sense.domain.usecase.GetSpoolByIdUseCase
 import com.filament.sense.domain.usecase.GetThresholdsUseCase
@@ -22,6 +24,7 @@ import javax.inject.Inject
 data class SpoolDetailUiState(
     val spool: SpoolSlot? = null,
     val measurements: List<Measurement> = emptyList(),
+    val envData: EnvData? = null,
     val showSetActiveDialog: Boolean = false,
     val thresholdWarning: Int = 500,
     val thresholdCritical: Int = 100,
@@ -31,6 +34,7 @@ data class SpoolDetailUiState(
 
 @HiltViewModel
 class SpoolDetailViewModel @Inject constructor(
+    private val spoolRepo: SpoolRepository,
     private val getSpoolById: GetSpoolByIdUseCase,
     private val getMeasurements: GetMeasurementsUseCase,
     private val getThresholds: GetThresholdsUseCase,
@@ -52,6 +56,11 @@ class SpoolDetailViewModel @Inject constructor(
                     thresholdCritical = c,
                     thresholdEmpty = e,
                 )
+            }
+        }
+        viewModelScope.launch {
+            spoolRepo.envData.collect { env ->
+                _state.value = _state.value.copy(envData = env)
             }
         }
     }

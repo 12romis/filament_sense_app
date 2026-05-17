@@ -53,6 +53,7 @@ import com.filament.sense.ui.components.BottomNav
 import com.filament.sense.ui.components.DataRow
 import com.filament.sense.ui.components.EnvDataCard
 import com.filament.sense.ui.components.ThresholdBar
+import com.filament.sense.ui.components.WeightHistoryChart
 import com.filament.sense.ui.navigation.Screen
 import com.filament.sense.ui.theme.PrimaryContainer
 import com.filament.sense.ui.theme.StatusConnected
@@ -146,19 +147,23 @@ fun HomeScreen(
                         modifier = Modifier.padding(horizontal = 16.dp),
                     )
                     Spacer(modifier = Modifier.height(12.dp))
+                    state.envData?.let { env ->
+                        EnvDataCard(
+                            envData = env,
+                            modifier = Modifier.padding(horizontal = 16.dp),
+                        )
+                        Spacer(modifier = Modifier.height(12.dp))
+                    }
+                    WeightHistoryChart(
+                        measurements = state.activeMeasurements,
+                        modifier = Modifier.padding(horizontal = 16.dp),
+                        emptyHint = "Недостатньо даних\n(накопичується кожні 5 хв,\nусереднено по 8 год)",
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
                 }
             }
 
             if (!isEmptyState) {
-                // ── Env data ─────────────────────────────────────────────
-                state.envData?.let { env ->
-                    EnvDataCard(
-                        envData = env,
-                        modifier = Modifier.padding(horizontal = 16.dp),
-                    )
-                    Spacer(modifier = Modifier.height(12.dp))
-                }
-
                 // ── "All spools" link ────────────────────────────────────
                 Box(
                     modifier = Modifier
@@ -173,6 +178,7 @@ fun HomeScreen(
                         color = MaterialTheme.colorScheme.primary,
                     )
                 }
+                Spacer(modifier = Modifier.height(24.dp))
             }
         }
     }

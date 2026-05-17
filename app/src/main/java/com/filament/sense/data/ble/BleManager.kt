@@ -17,6 +17,7 @@ import com.welie.blessed.GattStatus
 import com.welie.blessed.HciStatus
 import com.welie.blessed.ScanFailure
 import com.welie.blessed.WriteType
+import android.util.Log
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -79,6 +80,10 @@ class BleManager @Inject constructor(
     private val peripheralCallback = object : BluetoothPeripheralCallback() {
 
         override fun onServicesDiscovered(peripheral: BluetoothPeripheral) {
+            val cmdChar = peripheral.getCharacteristic(GattConstants.SERVICE_UUID, GattConstants.CMD_UUID)
+            Log.d("BleManager", "onServicesDiscovered: cmdChar=$cmdChar props=${cmdChar?.properties}")
+            // MTU negotiation must complete before writes — CONNECTED state moves to onMtuChanged
+            peripheral.requestMtu(512)
             peripheral.setNotify(GattConstants.SERVICE_UUID, GattConstants.SPOOL_DATA_UUID, true)
             peripheral.setNotify(GattConstants.SERVICE_UUID, GattConstants.ENV_DATA_UUID, true)
             peripheral.readCharacteristic(GattConstants.SERVICE_UUID, GattConstants.CONFIG_UUID)
@@ -87,6 +92,10 @@ class BleManager @Inject constructor(
             // з'являються із затримкою або не з'являються взагалі.
             peripheral.readCharacteristic(GattConstants.SERVICE_UUID, GattConstants.SPOOL_DATA_UUID)
             peripheral.readCharacteristic(GattConstants.SERVICE_UUID, GattConstants.ENV_DATA_UUID)
+        }
+
+        override fun onMtuChanged(peripheral: BluetoothPeripheral, mtu: Int, status: GattStatus) {
+            Log.d("BleManager", "MTU changed: mtu=$mtu status=$status")
             _deviceState.value = DeviceState.CONNECTED
         }
         override fun onCharacteristicUpdate(
@@ -224,15 +233,22 @@ class BleManager @Inject constructor(
     }
 
     fun sendCommand(json: String) {
-        val peripheral = connectedPeripheral ?: return
+        val peripheral = connectedPeripheral ?: run {
+            Log.w("BleManager", "sendCommand: no peripheral, json=$json")
+            return
+        }
+        Log.d("BleManager", "sendCommand: json=$json")
         try {
-            peripheral.writeCharacteristic(
+            val ok = peripheral.writeCharacteristic(
                 GattConstants.SERVICE_UUID,
                 GattConstants.CMD_UUID,
                 json.toByteArray(Charsets.UTF_8),
                 WriteType.WITHOUT_RESPONSE,
             )
-        } catch (_: Exception) {}
+            Log.d("BleManager", "sendCommand writeCharacteristic result=$ok")
+        } catch (e: Exception) {
+            Log.e("BleManager", "sendCommand exception", e)
+        }
     }
 
     /** Записує JSON у CONFIG-характеристику (WITH_RESPONSE). */

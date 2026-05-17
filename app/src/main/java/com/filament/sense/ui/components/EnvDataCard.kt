@@ -2,6 +2,7 @@ package com.filament.sense.ui.components
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -17,55 +18,74 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
 import com.filament.sense.domain.model.EnvData
 
-/**
- * Картка "Умови зберігання" — teal SecondaryContainer фон, вологість + температура.
- * Figma node 17:47.
- */
 @Composable
 fun EnvDataCard(
     envData: EnvData,
     modifier: Modifier = Modifier,
 ) {
-    Row(
+    Column(
         modifier = modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(16.dp))
             .background(MaterialTheme.colorScheme.secondaryContainer)
             .padding(horizontal = 16.dp, vertical = 12.dp),
-        verticalAlignment = Alignment.CenterVertically,
+        verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        Text(
-            text = "Умови зберігання",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSecondaryContainer,
-            modifier = Modifier.weight(1f),
-        )
         Row(
-            horizontalArrangement = Arrangement.spacedBy(4.dp),
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceEvenly,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text("💧", style = MaterialTheme.typography.bodyMedium)
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text("💧", style = MaterialTheme.typography.bodyMedium)
+                Text(
+                    text = "Вологість",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSecondaryContainer,
+                )
+                Spacer(modifier = Modifier.width(4.dp))
+                Text(
+                    text = "${"%.1f".format(envData.humidity)}%",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.secondary,
+                )
+            }
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text("🌡", style = MaterialTheme.typography.bodyMedium)
+                Text(
+                    text = "Температура",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSecondaryContainer,
+                )
+                Spacer(modifier = Modifier.width(4.dp))
+                Text(
+                    text = "${"%.1f".format(envData.temperature)}°C",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.secondary,
+                )
+            }
+        }
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.Center,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text("⬆⬇", style = MaterialTheme.typography.bodyMedium)
+            Spacer(modifier = Modifier.width(4.dp))
             Text(
-                text = "Вологість",
+                text = "Атмосферний тиск",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSecondaryContainer,
             )
             Spacer(modifier = Modifier.width(4.dp))
             Text(
-                text = "${envData.humidity.toInt()}%",
-                style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.secondary,
-            )
-            Spacer(modifier = Modifier.width(12.dp))
-            Text("🌡", style = MaterialTheme.typography.bodyMedium)
-            Text(
-                text = "Температура",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSecondaryContainer,
-            )
-            Spacer(modifier = Modifier.width(4.dp))
-            Text(
-                text = "${envData.temperature.toInt()}°C",
+                text = "${"%.1f".format(envData.pressure)} hPa",
                 style = MaterialTheme.typography.labelLarge,
                 color = MaterialTheme.colorScheme.secondary,
             )

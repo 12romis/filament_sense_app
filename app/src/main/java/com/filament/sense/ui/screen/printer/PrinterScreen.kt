@@ -1,0 +1,666 @@
+package com.filament.sense.ui.screen.printer
+
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.ElevatedCard
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Slider
+import androidx.compose.material3.Text
+import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.res.vectorResource
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.navigation.NavController
+import com.filament.sense.R
+import com.filament.sense.domain.model.DeviceState
+import com.filament.sense.domain.model.PrinterStatus
+import com.filament.sense.ui.components.BottomNav
+import com.filament.sense.ui.theme.StatusConnected
+import kotlin.math.roundToInt
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun PrinterScreen(
+    navController: NavController,
+    viewModel: PrinterViewModel = hiltViewModel(),
+) {
+    val deviceState by viewModel.deviceState.collectAsStateWithLifecycle()
+    val status by viewModel.printerStatus.collectAsStateWithLifecycle()
+    val isConnected = deviceState == DeviceState.CONNECTED
+
+    var showHeatSheet by remember { mutableStateOf(false) }
+    var showReprintSheet by remember { mutableStateOf(false) }
+
+    // Request fresh data whenever connection is established
+    LaunchedEffect(isConnected) {
+        if (isConnected) viewModel.refresh()
+    }
+
+    Scaffold(
+        containerColor = MaterialTheme.colorScheme.background,
+        bottomBar = {
+            BottomNav(
+                currentRoute = "printer",
+                onItemClick = { route ->
+                    if (route != "printer") navController.navigate(route)
+                },
+            )
+        },
+    ) { innerPadding ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding)
+                .verticalScroll(rememberScrollState()),
+        ) {
+            // ── Header ──────────────────────────────────────────────────────
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(56.dp)
+                    .padding(horizontal = 16.dp),
+                contentAlignment = Alignment.CenterStart,
+            ) {
+                Text(
+                    text = "Принтер",
+                    style = MaterialTheme.typography.titleLarge,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+            }
+
+            // ── Disconnection warning ────────────────────────────────────────
+            if (!isConnected) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 4.dp)
+                        .background(
+                            color = MaterialTheme.colorScheme.errorContainer,
+                            shape = RoundedCornerShape(12.dp),
+                        )
+                        .padding(horizontal = 16.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = "⚠️",
+                        style = MaterialTheme.typography.bodyLarge,
+                    )
+                    Spacer(Modifier.width(10.dp))
+                    Text(
+                        text = "Пристрій FilamentSense не підключений. З'єднайтесь для керування принтером.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onErrorContainer,
+                    )
+                }
+                Spacer(Modifier.height(8.dp))
+            }
+
+            // ── Printer identity card ────────────────────────────────────────
+            ElevatedCard(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp),
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 20.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    Icon(
+                        imageVector = ImageVector.vectorResource(R.drawable.ic_nav_printer),
+                        contentDescription = "Bambu P1S",
+                        tint = MaterialTheme.colorScheme.onPrimary,
+                        modifier = Modifier.size(72.dp),
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        text = "Bambu P1S",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
+                    if (isConnected && status != null) {
+                        Spacer(Modifier.height(4.dp))
+                        GcodeStateBadge(status!!.gcodeState)
+                    }
+                }
+            }
+
+            Spacer(Modifier.height(12.dp))
+
+            // ── Print status card ────────────────────────────────────────────
+            ElevatedCard(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp),
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                ) {
+                    Text(
+                        text = "Файл",
+                        style = MaterialTheme.typography.bodySmall.copy(fontSize = 13.sp),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    val fileName = if (isConnected) status?.fileName?.ifEmpty { "—" } ?: "—" else "—"
+                    Text(
+                        text = fileName,
+                        style = MaterialTheme.typography.bodyMedium.copy(fontSize = 15.sp),
+                        fontWeight = FontWeight.Medium,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+
+                    Spacer(Modifier.height(14.dp))
+
+                    // Progress bar
+                    val progress = if (isConnected && status != null) status!!.progress / 100f else 0f
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        LinearProgressIndicator(
+                            progress = { progress },
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(8.dp),
+                            // color = StatusConnected,
+                            trackColor = MaterialTheme.colorScheme.surfaceVariant,
+                        )
+                        Spacer(Modifier.width(10.dp))
+                        val pctText = if (isConnected && status != null) "${status!!.progress}%" else "—"
+                        Text(
+                            text = pctText,
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.width(48.dp),
+                            textAlign = TextAlign.End,
+                        )
+                    }
+
+                    Spacer(Modifier.height(12.dp))
+
+                    // Layers and time
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                    ) {
+                        // Layers
+                        Column {
+                            Text(
+                                text = "Шари",
+                                style = MaterialTheme.typography.bodySmall.copy(fontSize = 13.sp),
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                            val layerText = if (isConnected && status != null)
+                                "${status!!.layerNum} / ${status!!.totalLayers}" else "—"
+                            Text(
+                                text = layerText,
+                                style = MaterialTheme.typography.bodyMedium.copy(fontSize = 15.sp),
+                                fontWeight = FontWeight.Medium,
+                                color = MaterialTheme.colorScheme.onSurface,
+                            )
+                        }
+                        // Remaining time
+                        Column(horizontalAlignment = Alignment.End) {
+                            Text(
+                                text = "Залишилось",
+                                style = MaterialTheme.typography.bodySmall.copy(fontSize = 13.sp),
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                            val timeText = if (isConnected && status != null)
+                                formatRemainingTime(status!!.remainingMinutes) else "—"
+                            Text(
+                                text = timeText,
+                                style = MaterialTheme.typography.bodyMedium.copy(fontSize = 15.sp),
+                                fontWeight = FontWeight.Medium,
+                                color = MaterialTheme.colorScheme.onSurface,
+                            )
+                        }
+                    }
+                }
+            }
+
+            Spacer(Modifier.height(12.dp))
+
+            // ── Temperature card ─────────────────────────────────────────────
+            ElevatedCard(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp),
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    TempRow(
+                        label = "Сопло",
+                        current = if (isConnected) status?.nozzleTemp else null,
+                        target = if (isConnected) status?.nozzleTarget else null,
+                    )
+                    TempRow(
+                        label = "Стіл",
+                        current = if (isConnected) status?.bedTemp else null,
+                        target = if (isConnected) status?.bedTarget else null,
+                    )
+                }
+            }
+
+            Spacer(Modifier.height(20.dp))
+
+            // ── Refresh button ───────────────────────────────────────────────
+            OutlinedButton(
+                onClick = { viewModel.refresh() },
+                enabled = isConnected,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp),
+            ) {
+                Text("Оновити")
+            }
+
+            Spacer(Modifier.height(8.dp))
+
+            // ── Heat bed button ──────────────────────────────────────────────
+            OutlinedButton(
+                onClick = { showHeatSheet = true },
+                enabled = isConnected,
+                shape = RoundedCornerShape(12.dp),
+                colors = ButtonDefaults.outlinedButtonColors(
+                    contentColor = MaterialTheme.colorScheme.primary,
+                ),
+                border = androidx.compose.foundation.BorderStroke(
+                    1.dp, if (isConnected) MaterialTheme.colorScheme.primary
+                           else MaterialTheme.colorScheme.outline,
+                ),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp),
+            ) {
+                Text("Підняти температуру столу")
+            }
+
+            Spacer(Modifier.height(8.dp))
+
+            // ── Reprint button ───────────────────────────────────────────────
+            OutlinedButton(
+                onClick = { showReprintSheet = true },
+                enabled = isConnected,
+                shape = RoundedCornerShape(12.dp),
+                colors = ButtonDefaults.outlinedButtonColors(
+                    contentColor = MaterialTheme.colorScheme.secondary,
+                ),
+                border = androidx.compose.foundation.BorderStroke(
+                    1.dp, if (isConnected) MaterialTheme.colorScheme.secondary
+                           else MaterialTheme.colorScheme.outline,
+                ),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp),
+            ) {
+                Text("Повторити останній друк")
+            }
+
+            Spacer(Modifier.height(16.dp))
+        }
+    }
+
+    // ── Heat bed bottom sheet ────────────────────────────────────────────────
+    if (showHeatSheet) {
+        HeatBedBottomSheet(
+            isPrinting = status?.gcodeState?.uppercase() == "RUNNING",
+            currentBedTemp = status?.bedTarget,
+            onConfirm = { target ->
+                viewModel.heatBed(target)
+                showHeatSheet = false
+            },
+            onDismiss = { showHeatSheet = false },
+        )
+    }
+
+    // ── Reprint confirmation bottom sheet ────────────────────────────────────
+    if (showReprintSheet) {
+        ReprintBottomSheet(
+            fileName = status?.fileName ?: "",
+            isPrinting = status?.gcodeState?.uppercase() == "RUNNING",
+            onConfirm = {
+                viewModel.reprint()
+                showReprintSheet = false
+            },
+            onDismiss = { showReprintSheet = false },
+        )
+    }
+}
+
+// ── Sub-composables ──────────────────────────────────────────────────────────
+
+@Composable
+private fun GcodeStateBadge(gcodeState: String) {
+    val (label, color) = when (gcodeState.uppercase()) {
+        "RUNNING" -> "Друкується" to MaterialTheme.colorScheme.primary
+        "FINISH", "FINISHED" -> "Завершено" to MaterialTheme.colorScheme.tertiary
+        "PAUSE", "PAUSED" -> "Пауза" to MaterialTheme.colorScheme.secondary
+        "FAILED", "ERROR", "STOPPED" -> "Помилка" to MaterialTheme.colorScheme.error
+        "IDLE" -> "Очікує" to MaterialTheme.colorScheme.onSurfaceVariant
+        else -> return
+    }
+    Box(
+        modifier = Modifier
+            .background(color = color.copy(alpha = 0.15f), shape = RoundedCornerShape(20.dp))
+            .padding(horizontal = 12.dp, vertical = 4.dp),
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelMedium,
+            color = color,
+            fontWeight = FontWeight.SemiBold,
+        )
+    }
+}
+
+@Composable
+private fun TempRow(label: String, current: Float?, target: Int?) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween,
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.bodyMedium.copy(fontSize = 15.sp),
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.width(64.dp),
+        )
+        val currentStr = current?.let { "%.1f°C".format(it) } ?: "—"
+        val targetStr = target?.let { "${it}°C" } ?: "—"
+        Text(
+            text = currentStr,
+            style = MaterialTheme.typography.titleLarge.copy(fontSize = 20.sp),
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onSurface,
+        )
+        Text(
+            text = "→ $targetStr",
+            style = MaterialTheme.typography.bodyMedium.copy(fontSize = 15.sp),
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun HeatBedBottomSheet(
+    isPrinting: Boolean,
+    currentBedTemp: Int?,
+    onConfirm: (Int) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    var sliderValue by remember { mutableFloatStateOf(61f) }
+    val target = sliderValue.roundToInt()
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState,
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 24.dp)
+                .padding(bottom = 32.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            Text(
+                text = "Температура столу",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+            )
+            Spacer(Modifier.height(4.dp))
+            val stepHint = if (currentBedTemp != null)
+                "Нагрів від поточних ${currentBedTemp}°C по 9°C кожні 12 сек"
+            else
+                "Нагрів від поточної температури по 9°C кожні 12 сек"
+            Text(
+                text = stepHint,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center,
+            )
+
+            // Warning when printer is actively printing
+            if (isPrinting) {
+                Spacer(Modifier.height(10.dp))
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(
+                            color = MaterialTheme.colorScheme.errorContainer,
+                            shape = RoundedCornerShape(10.dp),
+                        )
+                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text("⚠️", style = MaterialTheme.typography.bodyMedium)
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        text = "Принтер зараз друкує. Зміна температури столу може бути проігнорована принтером або вплинути на якість друку.",
+                        style = MaterialTheme.typography.bodySmall.copy(fontSize = 13.sp),
+                        color = MaterialTheme.colorScheme.onErrorContainer,
+                    )
+                }
+            }
+
+            Spacer(Modifier.height(20.dp))
+
+            Text(
+                text = "$target°C",
+                style = MaterialTheme.typography.displaySmall,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.primary,
+            )
+            Spacer(Modifier.height(8.dp))
+            Slider(
+                value = sliderValue,
+                onValueChange = { sliderValue = it },
+                valueRange = 25f..110f,
+                steps = 0,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                Text("25°C", style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("110°C", style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+
+            Spacer(Modifier.height(24.dp))
+            Button(
+                onClick = { onConfirm(target) },
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text("Нагріти до $target°C")
+            }
+            Spacer(Modifier.height(8.dp))
+            OutlinedButton(
+                onClick = onDismiss,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text("Скасувати")
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ReprintBottomSheet(
+    fileName: String,
+    isPrinting: Boolean,
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState,
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 24.dp)
+                .padding(bottom = 32.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            if (isPrinting) {
+                // ── Blocked state: printer is currently printing ──────────────
+                Text(
+                    text = "Повторний друк недоступний",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.error,
+                )
+                Spacer(Modifier.height(16.dp))
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(
+                            color = MaterialTheme.colorScheme.errorContainer,
+                            shape = RoundedCornerShape(12.dp),
+                        )
+                        .padding(horizontal = 16.dp, vertical = 14.dp),
+                    verticalAlignment = Alignment.Top,
+                ) {
+                    Text("🚫", style = MaterialTheme.typography.titleMedium)
+                    Spacer(Modifier.width(10.dp))
+                    Column {
+                        Text(
+                            text = "Принтер зараз друкує",
+                            style = MaterialTheme.typography.bodyMedium.copy(fontSize = 15.sp),
+                            fontWeight = FontWeight.Medium,
+                            color = MaterialTheme.colorScheme.onErrorContainer,
+                        )
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            text = "Зупиніть або дочекайтесь завершення поточного друку, після чого повторний друк буде доступний.",
+                            style = MaterialTheme.typography.bodySmall.copy(fontSize = 13.sp),
+                            color = MaterialTheme.colorScheme.onErrorContainer,
+                        )
+                    }
+                }
+                Spacer(Modifier.height(20.dp))
+                Button(
+                    onClick = onDismiss,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text("Зрозуміло")
+                }
+            } else {
+                // ── Normal confirmation state ─────────────────────────────────
+                Text(
+                    text = "Повторити друк",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                Spacer(Modifier.height(12.dp))
+                if (fileName.isNotEmpty()) {
+                    Text(
+                        text = "Файл:",
+                        style = MaterialTheme.typography.bodySmall.copy(fontSize = 13.sp),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        text = fileName,
+                        style = MaterialTheme.typography.bodyMedium.copy(fontSize = 15.sp),
+                        fontWeight = FontWeight.Medium,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        textAlign = TextAlign.Center,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    Spacer(Modifier.height(6.dp))
+                }
+                Text(
+                    text = "Стіл буде прогрітий до 61°C перед початком друку.",
+                    style = MaterialTheme.typography.bodySmall.copy(fontSize = 13.sp),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.Center,
+                )
+                Spacer(Modifier.height(24.dp))
+                Button(
+                    onClick = onConfirm,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text("Підтвердити")
+                }
+                Spacer(Modifier.height(8.dp))
+                OutlinedButton(
+                    onClick = onDismiss,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text("Скасувати")
+                }
+            }
+        }
+    }
+}
+
+// ── Helpers ──────────────────────────────────────────────────────────────────
+
+private fun formatRemainingTime(minutes: Int): String {
+    if (minutes <= 0) return "0 хв"
+    val h = minutes / 60
+    val m = minutes % 60
+    return when {
+        h > 0 && m > 0 -> "${h} год ${m} хв"
+        h > 0 -> "${h} год"
+        else -> "${m} хв"
+    }
+}

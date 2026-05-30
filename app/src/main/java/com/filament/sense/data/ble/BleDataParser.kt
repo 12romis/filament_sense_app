@@ -2,7 +2,9 @@ package com.filament.sense.data.ble
 
 import com.filament.sense.domain.model.ConfigData
 import com.filament.sense.domain.model.EnvData
+import com.filament.sense.domain.model.PrinterStatus
 import com.filament.sense.domain.model.SpoolSlot
+import org.json.JSONObject
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 
@@ -77,4 +79,39 @@ object BleDataParser {
 
     fun buildManualReportCmd() =
         """{"cmd":"manual_report"}"""
+
+    // ── Printer commands ─────────────────────────────────────────────────────
+
+    fun buildGetPrinterStatusCmd() = """{"cmd":"get_printer_status"}"""
+
+    fun buildHeatBedCmd(target: Int) = """{"cmd":"heat_bed","target":$target}"""
+
+    fun buildReprintCmd() = """{"cmd":"reprint"}"""
+
+    /**
+     * Парсить JSON телеметрії принтера з PRINTER_STATUS_UUID:
+     *   {"gs":"RUNNING","f":"file.3mf","nt":"254.9","ntt":255,
+     *    "bt":"65.0","btt":65,"pct":67,"rem":22,"ly":95,"tly":166}
+     */
+    fun parsePrinterStatus(bytes: ByteArray): PrinterStatus? {
+        return try {
+            val json = bytes.toString(Charsets.UTF_8).trim()
+            if (json.isEmpty() || json == "{}") return null
+            val obj = JSONObject(json)
+            PrinterStatus(
+                gcodeState = obj.optString("gs", ""),
+                fileName = obj.optString("f", ""),
+                nozzleTemp = obj.optString("nt", "").toFloatOrNull(),
+                nozzleTarget = if (obj.has("ntt")) obj.optInt("ntt") else null,
+                bedTemp = obj.optString("bt", "").toFloatOrNull(),
+                bedTarget = if (obj.has("btt")) obj.optInt("btt") else null,
+                progress = obj.optInt("pct", 0),
+                remainingMinutes = obj.optInt("rem", 0),
+                layerNum = obj.optInt("ly", 0),
+                totalLayers = obj.optInt("tly", 0),
+            )
+        } catch (_: Exception) {
+            null
+        }
+    }
 }

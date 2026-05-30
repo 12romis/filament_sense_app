@@ -38,7 +38,7 @@ private data class NavItem(
 private val navItems = listOf(
     NavItem("Пристрій",  "home",      R.drawable.ic_nav_device),
     NavItem("Котушки",   "spools",    R.drawable.ic_nav_spools),
-    NavItem("Аналітика", "analytics", R.drawable.ic_nav_analytics),
+    NavItem("Принтер",   "printer",   R.drawable.ic_nav_printer),
     NavItem("Налашт.",   "settings",  R.drawable.ic_nav_settings),
 )
 

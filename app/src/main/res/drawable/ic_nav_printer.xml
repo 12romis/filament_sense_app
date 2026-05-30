@@ -1,0 +1,26 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <!-- Outer body with inner cutout (enclosed Bambu-style printer) -->
+    <path
+        android:fillColor="#FF000000"
+        android:pathData="M20,2H4C3.45,2 3,2.45 3,3v18c0,0.55 0.45,1 1,1h16c0.55,0 1,-0.45 1,-1V3C21,2.45 20.55,2 20,2zM19,20H5V4h14V20z"/>
+    <!-- Top rail (X-axis gantry) -->
+    <path
+        android:fillColor="#FF000000"
+        android:pathData="M5,4h14v2.5H5z"/>
+    <!-- Print head carriage -->
+    <path
+        android:fillColor="#FF000000"
+        android:pathData="M9.5,8.5h5l-0.6,3.2H10.1z"/>
+    <!-- Nozzle tip -->
+    <path
+        android:fillColor="#FF000000"
+        android:pathData="M11.2,11.7h1.6l-0.8,2.3z"/>
+    <!-- Print bed -->
+    <path
+        android:fillColor="#FF000000"
+        android:pathData="M5.5,17h13v1.5h-13z"/>
+</vector>

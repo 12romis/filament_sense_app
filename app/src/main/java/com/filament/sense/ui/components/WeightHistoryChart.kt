@@ -26,16 +26,17 @@ import com.patrykandpatrick.vico.compose.cartesian.axis.rememberBottom
 import com.patrykandpatrick.vico.compose.cartesian.axis.rememberStart
 import com.patrykandpatrick.vico.compose.cartesian.layer.rememberLineCartesianLayer
 import com.patrykandpatrick.vico.compose.cartesian.rememberCartesianChart
+import com.patrykandpatrick.vico.compose.cartesian.rememberVicoScrollState
+import com.patrykandpatrick.vico.core.cartesian.Scroll
 import com.patrykandpatrick.vico.core.cartesian.axis.HorizontalAxis
 import com.patrykandpatrick.vico.core.cartesian.axis.VerticalAxis
 import com.patrykandpatrick.vico.core.cartesian.data.CartesianChartModelProducer
 import com.patrykandpatrick.vico.core.cartesian.data.CartesianValueFormatter
 import com.patrykandpatrick.vico.core.cartesian.data.lineSeries
 import java.text.SimpleDateFormat
+import java.util.Calendar
 import java.util.Date
 import java.util.Locale
-
-private val DAY_MS = 24L * 60 * 60 * 1000
 
 @Composable
 fun WeightHistoryChart(
@@ -43,34 +44,53 @@ fun WeightHistoryChart(
     modifier: Modifier = Modifier,
     emptyHint: String = "Недостатньо даних",
 ) {
+    val dailyMeasurements = remember(measurements) {
+        measurements
+            .groupBy { m ->
+                val cal = Calendar.getInstance()
+                cal.timeInMillis = m.timestamp
+                cal.set(Calendar.HOUR_OF_DAY, 0)
+                cal.set(Calendar.MINUTE, 0)
+                cal.set(Calendar.SECOND, 0)
+                cal.set(Calendar.MILLISECOND, 0)
+                cal.timeInMillis
+            }
+            .map { (dayMs, list) ->
+                Measurement(
+                    spoolIndex = list.first().spoolIndex,
+                    remainingGrams = list.map { it.remainingGrams }.average().toFloat(),
+                    temperature = null,
+                    humidity = null,
+                    timestamp = dayMs,
+                )
+            }
+            .sortedBy { it.timestamp }
+    }
+
     val modelProducer = remember { CartesianChartModelProducer() }
 
-    LaunchedEffect(measurements) {
-        if (measurements.size >= 2) {
+    LaunchedEffect(dailyMeasurements) {
+        if (dailyMeasurements.size >= 2) {
             modelProducer.runTransaction {
                 lineSeries {
                     series(
-                        x = measurements.indices.map { it.toDouble() },
-                        y = measurements.map { it.remainingGrams.toDouble() },
+                        x = dailyMeasurements.indices.map { it.toDouble() },
+                        y = dailyMeasurements.map { it.remainingGrams.toDouble() },
                     )
                 }
             }
         }
     }
 
-    val xFormatter = remember(measurements) {
-        if (measurements.size < 2) {
+    val sdf = remember { SimpleDateFormat("dd.MM", Locale.getDefault()) }
+
+    val xFormatter = remember(dailyMeasurements) {
+        if (dailyMeasurements.size < 2) {
             CartesianValueFormatter.decimal()
         } else {
-            val rangeMs = measurements.last().timestamp - measurements.first().timestamp
-            val sdf = if (rangeMs < DAY_MS) {
-                SimpleDateFormat("HH:mm", Locale.getDefault())
-            } else {
-                SimpleDateFormat("dd.MM", Locale.getDefault())
-            }
             CartesianValueFormatter { _, value, _ ->
-                val idx = value.toInt().coerceIn(measurements.indices)
-                sdf.format(Date(measurements[idx].timestamp))
+                val idx = value.toInt().coerceIn(dailyMeasurements.indices)
+                sdf.format(Date(dailyMeasurements[idx].timestamp))
             }
         }
     }
@@ -78,6 +98,8 @@ fun WeightHistoryChart(
     val yFormatter = remember {
         CartesianValueFormatter { _, value, _ -> "${value.toInt().formatWeight()} г" }
     }
+
+    val scrollState = rememberVicoScrollState(initialScroll = Scroll.Absolute.End)
 
     Column(
         modifier = modifier
@@ -93,7 +115,7 @@ fun WeightHistoryChart(
         )
         Spacer(modifier = Modifier.height(8.dp))
 
-        if (measurements.size < 2) {
+        if (dailyMeasurements.size < 2) {
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -118,6 +140,7 @@ fun WeightHistoryChart(
                     ),
                 ),
                 modelProducer = modelProducer,
+                scrollState = scrollState,
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(180.dp),

@@ -27,6 +27,9 @@ import javax.inject.Inject
 /** Час очікування успішного підключення. Якщо CONNECTING довше — скасовуємо. */
 private const val CONNECT_TIMEOUT_MS = 15_000L
 
+/** Максимальна кількість повторних спроб після першої невдачі. */
+private const val MAX_RECONNECT_RETRIES = 2
+
 data class HomeUiState(
     val deviceState: DeviceState = DeviceState.DISCONNECTED,
     val deviceName: String = "",
@@ -54,6 +57,9 @@ class HomeViewModel @Inject constructor(
     /** Job таймауту підключення — скасовується при успішному connect або новому виклику. */
     private var connectTimeoutJob: Job? = null
 
+    /** Лічильник повторних спроб поточної серії reconnect. */
+    private var reconnectAttempts = 0
+
     init {
         val hasLastMac = deviceRepo.lastConnectedMac != null
 
@@ -79,15 +85,17 @@ class HomeViewModel @Inject constructor(
                 val current = _state.value
 
                 when {
-                    // Успішне підключення — скасовуємо таймаут
+                    // Успішне підключення — скасовуємо таймаут, скидаємо лічильник
                     deviceState == DeviceState.CONNECTED -> {
                         connectTimeoutJob?.cancel()
                         connectTimeoutJob = null
+                        reconnectAttempts = 0
                     }
-                    // Несподіваний розрив із CONNECTED → авторепідключення
+                    // Несподіваний розрив із CONNECTED → починаємо серію reconnect
                     deviceState == DeviceState.DISCONNECTED &&
                     current.deviceState == DeviceState.CONNECTED &&
                     hasLastMac && !deviceRepo.wasManualDisconnect -> {
+                        reconnectAttempts = 0
                         startAutoConnect()
                     }
                 }
@@ -122,16 +130,28 @@ class HomeViewModel @Inject constructor(
 
     /**
      * Запускає autoConnect + таймаут 15 с.
-     * Якщо за цей час стан не перейшов у CONNECTED — скасовуємо підключення,
-     * BleManager викличе onDisconnectedPeripheral → стан → DISCONNECTED → показуємо CTA.
+     * При невдачі автоматично повторює до [MAX_RECONNECT_RETRIES] разів
+     * з прогресивною затримкою (3 с, 6 с) перед тим як показати CTA.
      */
     private fun startAutoConnect() {
         connectTimeoutJob?.cancel()
         deviceRepo.autoConnect()
         connectTimeoutJob = viewModelScope.launch {
             delay(CONNECT_TIMEOUT_MS)
-            if (_state.value.deviceState == DeviceState.CONNECTING) {
-                deviceRepo.cancelConnection()
+            if (_state.value.deviceState != DeviceState.CONNECTING) return@launch
+
+            deviceRepo.cancelConnection()
+
+            if (!deviceRepo.wasManualDisconnect && reconnectAttempts < MAX_RECONNECT_RETRIES) {
+                reconnectAttempts++
+                val backoffMs = reconnectAttempts * 3_000L   // 3 с, 6 с
+                delay(backoffMs)
+                if (!deviceRepo.wasManualDisconnect &&
+                    _state.value.deviceState == DeviceState.DISCONNECTED) {
+                    startAutoConnect()
+                }
+            } else {
+                reconnectAttempts = 0
                 _state.value = _state.value.copy(showReconnectCta = true)
             }
         }

@@ -8,6 +8,7 @@ import android.os.Looper
 import com.filament.sense.domain.model.ConfigData
 import com.filament.sense.domain.model.DeviceState
 import com.filament.sense.domain.model.EnvData
+import com.filament.sense.domain.model.PrinterStatus
 import com.filament.sense.domain.model.SpoolSlot
 import com.welie.blessed.BluetoothCentralManager
 import com.welie.blessed.BluetoothCentralManagerCallback
@@ -65,6 +66,9 @@ class BleManager @Inject constructor(
     private val _debugInfo = MutableStateFlow("idle")
     val debugInfo: StateFlow<String> = _debugInfo.asStateFlow()
 
+    private val _printerStatus = MutableStateFlow<PrinterStatus?>(null)
+    val printerStatus: StateFlow<PrinterStatus?> = _printerStatus.asStateFlow()
+
     val lastConnectedMac: String?
         get() = prefs.getString(PREF_LAST_MAC, null)
 
@@ -86,6 +90,7 @@ class BleManager @Inject constructor(
             peripheral.requestMtu(512)
             peripheral.setNotify(GattConstants.SERVICE_UUID, GattConstants.SPOOL_DATA_UUID, true)
             peripheral.setNotify(GattConstants.SERVICE_UUID, GattConstants.ENV_DATA_UUID, true)
+            peripheral.setNotify(GattConstants.SERVICE_UUID, GattConstants.PRINTER_STATUS_UUID, true)
             peripheral.readCharacteristic(GattConstants.SERVICE_UUID, GattConstants.CONFIG_UUID)
             // Позачергове читання поточного стану одразу після підключення —
             // нотифікації приходять лише при зміні, тому без цього дані
@@ -119,6 +124,9 @@ class BleManager @Inject constructor(
                 GattConstants.CONFIG_UUID -> {
                     _configData.value = BleDataParser.parseConfig(value)
                 }
+                GattConstants.PRINTER_STATUS_UUID -> {
+                    BleDataParser.parsePrinterStatus(value)?.let { _printerStatus.value = it }
+                }
             }
         }
     }
@@ -148,6 +156,7 @@ class BleManager @Inject constructor(
                 _deviceState.value = DeviceState.DISCONNECTED
             }
             _envData.value = null
+            _printerStatus.value = null
         }
 
         override fun onDiscoveredPeripheral(

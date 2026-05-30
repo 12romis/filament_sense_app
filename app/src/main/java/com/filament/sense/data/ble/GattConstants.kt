@@ -20,4 +20,7 @@ object GattConstants {
 
     // Read + Write: JSON config string (mqtt_host, …)
     val CONFIG_UUID: UUID = UUID.fromString("beb5483e-36e1-4688-b7f5-ea07361b26b3")
+
+    // Read + Notify: JSON printer telemetry from Bambu MQTT (via ESP32)
+    val PRINTER_STATUS_UUID: UUID = UUID.fromString("beb5483e-36e1-4688-b7f5-ea07361b26b4")
 }

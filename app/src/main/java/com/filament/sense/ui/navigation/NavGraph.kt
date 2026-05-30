@@ -7,8 +7,8 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
-import com.filament.sense.ui.screen.analytics.AnalyticsScreen
 import com.filament.sense.ui.screen.home.HomeScreen
+import com.filament.sense.ui.screen.printer.PrinterScreen
 import com.filament.sense.ui.screen.scan.ScanScreen
 import com.filament.sense.ui.screen.settings.SettingsScreen
 import com.filament.sense.ui.screen.spool.SpoolDetailScreen
@@ -27,7 +27,7 @@ sealed class Screen(val route: String) {
         fun createRoute(id: Int) = "spools/$id/edit"
     }
     object SpoolCreate : Screen("spools/create")
-    object Analytics   : Screen("analytics")
+    object Printer     : Screen("printer")
     object Settings    : Screen("settings")
 }
 
@@ -65,8 +65,8 @@ fun NavGraph(
         ) {
             SpoolEditScreen(navController = navController)
         }
-        composable(Screen.Analytics.route) {
-            AnalyticsScreen(navController = navController)
+        composable(Screen.Printer.route) {
+            PrinterScreen(navController = navController)
         }
         composable(Screen.Settings.route) {
             SettingsScreen(navController = navController)

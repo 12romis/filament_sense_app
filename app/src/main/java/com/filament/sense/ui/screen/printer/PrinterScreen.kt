@@ -352,7 +352,7 @@ fun PrinterScreen(
     if (showHeatSheet) {
         HeatBedBottomSheet(
             isPrinting = status?.gcodeState?.uppercase() == "RUNNING",
-            currentBedTemp = status?.bedTarget,
+            currentBedTemp = status?.bedTemp?.roundToInt(),
             onConfirm = { target ->
                 viewModel.heatBed(target)
                 showHeatSheet = false
@@ -381,7 +381,7 @@ fun PrinterScreen(
 private fun GcodeStateBadge(gcodeState: String) {
     val (label, color) = when (gcodeState.uppercase()) {
         "RUNNING" -> "Друкується" to MaterialTheme.colorScheme.primary
-        "FINISH", "FINISHED" -> "Завершено" to MaterialTheme.colorScheme.tertiary
+        "FINISH", "FINISHED" -> "Завершено" to StatusConnected
         "PAUSE", "PAUSED" -> "Пауза" to MaterialTheme.colorScheme.secondary
         "FAILED", "ERROR", "STOPPED" -> "Помилка" to MaterialTheme.colorScheme.error
         "IDLE" -> "Очікує" to MaterialTheme.colorScheme.onSurfaceVariant
@@ -465,7 +465,7 @@ private fun HeatBedBottomSheet(
                 "Нагрів від поточної температури по 9°C кожні 12 сек"
             Text(
                 text = stepHint,
-                style = MaterialTheme.typography.bodySmall,
+                style = MaterialTheme.typography.bodySmall.copy(fontSize = 13.sp),
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center,
             )
@@ -477,24 +477,23 @@ private fun HeatBedBottomSheet(
                     modifier = Modifier
                         .fillMaxWidth()
                         .background(
-                            color = MaterialTheme.colorScheme.errorContainer,
+                            color = MaterialTheme.colorScheme.secondaryContainer,
                             shape = RoundedCornerShape(10.dp),
                         )
                         .padding(horizontal = 12.dp, vertical = 8.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Text("⚠️", style = MaterialTheme.typography.bodyMedium)
+                    Text("ℹ️", style = MaterialTheme.typography.bodyMedium)
                     Spacer(Modifier.width(8.dp))
                     Text(
-                        text = "Принтер зараз друкує. Зміна температури столу може бути проігнорована принтером або вплинути на якість друку.",
+                        text = "Принтер зараз друкує. Зміна температури може вплинути на поточний друк.",
                         style = MaterialTheme.typography.bodySmall.copy(fontSize = 13.sp),
-                        color = MaterialTheme.colorScheme.onErrorContainer,
+                        color = MaterialTheme.colorScheme.onSecondaryContainer,
                     )
                 }
             }
 
             Spacer(Modifier.height(20.dp))
-
             Text(
                 text = "$target°C",
                 style = MaterialTheme.typography.displaySmall,
@@ -518,7 +517,6 @@ private fun HeatBedBottomSheet(
                 Text("110°C", style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-
             Spacer(Modifier.height(24.dp))
             Button(
                 onClick = { onConfirm(target) },
@@ -628,7 +626,7 @@ private fun ReprintBottomSheet(
                     Spacer(Modifier.height(6.dp))
                 }
                 Text(
-                    text = "Стіл буде прогрітий до 61°C перед початком друку.",
+                    text = "Стіл буде поступово прогрітий до 61°C перед початком друку.",
                     style = MaterialTheme.typography.bodySmall.copy(fontSize = 13.sp),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     textAlign = TextAlign.Center,

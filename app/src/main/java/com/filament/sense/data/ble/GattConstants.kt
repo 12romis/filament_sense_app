@@ -23,4 +23,7 @@ object GattConstants {
 
     // Read + Notify: JSON printer telemetry from Bambu MQTT (via ESP32)
     val PRINTER_STATUS_UUID: UUID = UUID.fromString("beb5483e-36e1-4688-b7f5-ea07361b26b4")
+
+    // Read + Notify: JSON array of recently printed files ["file_plate_1.gcode", ...]
+    val FILES_LIST_UUID: UUID = UUID.fromString("beb5483e-36e1-4688-b7f5-ea07361b26b5")
 }

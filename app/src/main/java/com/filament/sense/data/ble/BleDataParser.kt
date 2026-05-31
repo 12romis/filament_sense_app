@@ -86,7 +86,23 @@ object BleDataParser {
 
     fun buildHeatBedCmd(target: Int) = """{"cmd":"heat_bed","target":$target}"""
 
-    fun buildReprintCmd() = """{"cmd":"reprint"}"""
+    fun buildReprintCmd(file: String = "") = if (file.isEmpty())
+        """{"cmd":"reprint"}"""
+    else
+        """{"cmd":"reprint","file":"$file"}"""
+
+    fun buildListFilesCmd() = """{"cmd":"list_files"}"""
+
+    fun parseFilesList(bytes: ByteArray): List<String> {
+        return try {
+            val json = bytes.toString(Charsets.UTF_8).trim()
+            if (json.isEmpty() || json == "[]") return emptyList()
+            val arr = org.json.JSONArray(json)
+            (0 until arr.length()).map { arr.getString(it) }.filter { it.isNotEmpty() }
+        } catch (_: Exception) {
+            emptyList()
+        }
+    }
 
     /**
      * Парсить JSON телеметрії принтера з PRINTER_STATUS_UUID:

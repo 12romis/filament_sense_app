@@ -25,7 +25,11 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExposedDropdownMenuBox
+import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
@@ -78,6 +82,7 @@ fun PrinterScreen(
     val deviceState by viewModel.deviceState.collectAsStateWithLifecycle()
     val status by viewModel.printerStatus.collectAsStateWithLifecycle()
     val lastSyncTime by viewModel.lastSyncTime.collectAsStateWithLifecycle()
+    val filesList by viewModel.filesList.collectAsStateWithLifecycle()
     val isConnected = deviceState == DeviceState.CONNECTED
 
     var showHeatSheet by remember { mutableStateOf(false) }
@@ -364,7 +369,7 @@ fun PrinterScreen(
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp),
             ) {
-                Text("Повторити останній друк")
+                Text("Повторити друк")
             }
 
             Spacer(Modifier.height(16.dp))
@@ -389,8 +394,10 @@ fun PrinterScreen(
         ReprintBottomSheet(
             fileName = status?.fileName ?: "",
             isPrinting = status?.gcodeState?.uppercase() == "RUNNING",
-            onConfirm = {
-                viewModel.reprint()
+            filesList = filesList,
+            onOpen = { viewModel.requestFilesList() },
+            onConfirm = { fileOverride ->
+                viewModel.reprint(fileOverride)
                 showReprintSheet = false
             },
             onDismiss = { showReprintSheet = false },
@@ -618,10 +625,21 @@ private fun HeatBedBottomSheet(
 private fun ReprintBottomSheet(
     fileName: String,
     isPrinting: Boolean,
-    onConfirm: () -> Unit,
+    filesList: List<String>,
+    onOpen: () -> Unit,
+    onConfirm: (String) -> Unit,
     onDismiss: () -> Unit,
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    var fileOverride by remember { mutableStateOf("") }
+    var dropdownExpanded by remember { mutableStateOf(false) }
+
+    LaunchedEffect(Unit) { onOpen() }
+    LaunchedEffect(filesList) {
+        if (fileOverride.isEmpty() && filesList.isNotEmpty()) {
+            fileOverride = filesList.first()
+        }
+    }
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -709,9 +727,50 @@ private fun ReprintBottomSheet(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     textAlign = TextAlign.Center,
                 )
-                Spacer(Modifier.height(24.dp))
+                Spacer(Modifier.height(16.dp))
+                ExposedDropdownMenuBox(
+                    expanded = dropdownExpanded && filesList.isNotEmpty(),
+                    onExpandedChange = { if (filesList.isNotEmpty()) dropdownExpanded = it },
+                ) {
+                    OutlinedTextField(
+                        value = fileOverride,
+                        onValueChange = { fileOverride = it; dropdownExpanded = false },
+                        label = { Text("Файл для друку") },
+                        placeholder = { Text("myfile_plate_2.gcode") },
+                        singleLine = true,
+                        trailingIcon = {
+                            if (filesList.isNotEmpty())
+                                ExposedDropdownMenuDefaults.TrailingIcon(dropdownExpanded)
+                        },
+                        modifier = Modifier
+                            .menuAnchor()
+                            .fillMaxWidth(),
+                    )
+                    if (filesList.isNotEmpty()) {
+                        ExposedDropdownMenu(
+                            expanded = dropdownExpanded,
+                            onDismissRequest = { dropdownExpanded = false },
+                        ) {
+                            filesList.forEach { file ->
+                                DropdownMenuItem(
+                                    text = {
+                                        Text(
+                                            text = file,
+                                            style = MaterialTheme.typography.bodySmall,
+                                        )
+                                    },
+                                    onClick = {
+                                        fileOverride = file
+                                        dropdownExpanded = false
+                                    },
+                                )
+                            }
+                        }
+                    }
+                }
+                Spacer(Modifier.height(16.dp))
                 Button(
-                    onClick = onConfirm,
+                    onClick = { onConfirm(fileOverride.trim()) },
                     modifier = Modifier.fillMaxWidth(),
                 ) {
                     Text("Підтвердити")

@@ -69,6 +69,9 @@ class BleManager @Inject constructor(
     private val _printerStatus = MutableStateFlow<PrinterStatus?>(null)
     val printerStatus: StateFlow<PrinterStatus?> = _printerStatus.asStateFlow()
 
+    private val _filesList = MutableStateFlow<List<String>>(emptyList())
+    val filesList: StateFlow<List<String>> = _filesList.asStateFlow()
+
     val lastConnectedMac: String?
         get() = prefs.getString(PREF_LAST_MAC, null)
 
@@ -91,6 +94,7 @@ class BleManager @Inject constructor(
             peripheral.setNotify(GattConstants.SERVICE_UUID, GattConstants.SPOOL_DATA_UUID, true)
             peripheral.setNotify(GattConstants.SERVICE_UUID, GattConstants.ENV_DATA_UUID, true)
             peripheral.setNotify(GattConstants.SERVICE_UUID, GattConstants.PRINTER_STATUS_UUID, true)
+            peripheral.setNotify(GattConstants.SERVICE_UUID, GattConstants.FILES_LIST_UUID, true)
             peripheral.readCharacteristic(GattConstants.SERVICE_UUID, GattConstants.CONFIG_UUID)
             // Позачергове читання поточного стану одразу після підключення —
             // нотифікації приходять лише при зміні, тому без цього дані
@@ -127,6 +131,9 @@ class BleManager @Inject constructor(
                 GattConstants.PRINTER_STATUS_UUID -> {
                     BleDataParser.parsePrinterStatus(value)?.let { _printerStatus.value = it }
                 }
+                GattConstants.FILES_LIST_UUID -> {
+                    _filesList.value = BleDataParser.parseFilesList(value)
+                }
             }
         }
     }
@@ -157,6 +164,7 @@ class BleManager @Inject constructor(
             }
             _envData.value = null
             _printerStatus.value = null
+            _filesList.value = emptyList()
         }
 
         override fun onDiscoveredPeripheral(

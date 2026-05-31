@@ -20,6 +20,7 @@ class PrinterViewModel @Inject constructor(
 
     val deviceState: StateFlow<DeviceState> = bleManager.deviceState
     val printerStatus: StateFlow<PrinterStatus?> = bleManager.printerStatus
+    val filesList: StateFlow<List<String>> = bleManager.filesList
 
     private val _lastSyncTime = MutableStateFlow<Long?>(null)
     val lastSyncTime: StateFlow<Long?> = _lastSyncTime.asStateFlow()
@@ -40,7 +41,11 @@ class PrinterViewModel @Inject constructor(
         bleManager.sendCommand(BleDataParser.buildHeatBedCmd(targetCelsius))
     }
 
-    fun reprint() {
-        bleManager.sendCommand(BleDataParser.buildReprintCmd())
+    fun reprint(fileOverride: String = "") {
+        bleManager.sendCommand(BleDataParser.buildReprintCmd(fileOverride.trim()))
+    }
+
+    fun requestFilesList() {
+        bleManager.sendCommand(BleDataParser.buildListFilesCmd())
     }
 }

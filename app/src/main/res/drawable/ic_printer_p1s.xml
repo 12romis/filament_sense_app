@@ -1,0 +1,50 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+
+    <!-- Body frame + glass cutout + display window + control knob + foot recesses (evenOdd) -->
+    <path
+        android:fillColor="#FF000000"
+        android:fillType="evenOdd"
+        android:pathData="M22.5,1H1.5V23H22.5V1Z
+                          M2.2,7H21.8V22H2.2Z
+                          M2.2,2.2H13.5V5.8H2.2Z
+                          M18.2,4A1.8,1.8 0 1 0 21.8,4A1.8,1.8 0 1 0 18.2,4Z
+                          M3,22H5.5V23H3Z
+                          M18.5,22H21V23H18.5Z"/>
+
+    <!-- X-axis gantry rail -->
+    <path
+        android:fillColor="#FF000000"
+        android:pathData="M2.2,8H21.8V9.5H2.2Z"/>
+
+    <!-- Z-axis guide rails visible through glass (left and right) -->
+    <path
+        android:fillColor="#FF000000"
+        android:pathData="M2.8,9.5H3.8V21H2.8Z M20.2,9.5H21.2V21H20.2Z"/>
+
+    <!-- Toolhead body with cooling fan hole (evenOdd) -->
+    <path
+        android:fillColor="#FF000000"
+        android:fillType="evenOdd"
+        android:pathData="M9,9.5H15V15.5H9Z
+                          M10.5,12A1.5,1.5 0 1 0 13.5,12A1.5,1.5 0 1 0 10.5,12Z"/>
+
+    <!-- Nozzle tip -->
+    <path
+        android:fillColor="#FF000000"
+        android:pathData="M9.8,15.5H14.2L12,18Z"/>
+
+    <!-- Print bed platform -->
+    <path
+        android:fillColor="#FF000000"
+        android:pathData="M2.5,19.5H21.5V21H2.5Z"/>
+
+    <!-- Bed support shelf -->
+    <path
+        android:fillColor="#FF000000"
+        android:pathData="M4,21H20V22H4Z"/>
+
+</vector>

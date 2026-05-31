@@ -1,5 +1,6 @@
 package com.filament.sense.ui.screen.printer
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -13,6 +14,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
@@ -38,6 +40,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.vectorResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -54,6 +58,17 @@ import com.filament.sense.ui.components.BottomNav
 import com.filament.sense.ui.theme.StatusConnected
 import kotlin.math.roundToInt
 
+private fun formatSyncTime(timeMs: Long?): String {
+    if (timeMs == null) return "Немає даних"
+    val diffSec = (System.currentTimeMillis() - timeMs) / 1000
+    return when {
+        diffSec < 10   -> "Щойно"
+        diffSec < 60   -> "${diffSec} сек тому"
+        diffSec < 3600 -> "${diffSec / 60} хв тому"
+        else           -> "${diffSec / 3600} год тому"
+    }
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PrinterScreen(
@@ -62,6 +77,7 @@ fun PrinterScreen(
 ) {
     val deviceState by viewModel.deviceState.collectAsStateWithLifecycle()
     val status by viewModel.printerStatus.collectAsStateWithLifecycle()
+    val lastSyncTime by viewModel.lastSyncTime.collectAsStateWithLifecycle()
     val isConnected = deviceState == DeviceState.CONNECTED
 
     var showHeatSheet by remember { mutableStateOf(false) }
@@ -137,28 +153,35 @@ fun PrinterScreen(
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp),
             ) {
-                Column(
+                Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(vertical = 20.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
+                        .padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Icon(
-                        imageVector = ImageVector.vectorResource(R.drawable.ic_nav_printer),
+                    Image(
+                        painter = painterResource(R.drawable.p1s_printer),
                         contentDescription = "Bambu P1S",
-                        tint = MaterialTheme.colorScheme.onPrimary,
-                        modifier = Modifier.size(72.dp),
+                        contentScale = ContentScale.Fit,
+                        modifier = Modifier.size(160.dp),
                     )
-                    Spacer(Modifier.height(8.dp))
-                    Text(
-                        text = "Bambu P1S",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.onSurface,
-                    )
-                    if (isConnected && status != null) {
+                    Spacer(Modifier.width(16.dp))
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
+                        Text(
+                            text = "Bambu P1S",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onSurface,
+                        )
+                        if (isConnected && status != null) {
+                            GcodeStateBadge(status!!.gcodeState)
+                        }
                         Spacer(Modifier.height(4.dp))
-                        GcodeStateBadge(status!!.gcodeState)
+                        DeviceConnectionRow(deviceState = deviceState)
+                        // LastSyncRow(lastSyncMs = lastSyncTime)
                     }
                 }
             }
@@ -402,6 +425,61 @@ private fun GcodeStateBadge(gcodeState: String) {
 }
 
 @Composable
+private fun DeviceConnectionRow(deviceState: DeviceState) {
+    val (stateLabel, dotColor) = when (deviceState) {
+        DeviceState.CONNECTED    -> "Підключено"    to StatusConnected
+        DeviceState.CONNECTING   -> "Підключення…"  to MaterialTheme.colorScheme.secondary
+        DeviceState.SCANNING     -> "Пошук…"        to MaterialTheme.colorScheme.secondary
+        DeviceState.DISCONNECTED -> "Не підключено" to MaterialTheme.colorScheme.error
+    }
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Box(
+            modifier = Modifier
+                .size(8.dp)
+                .background(color = dotColor, shape = CircleShape),
+        )
+        Spacer(Modifier.width(8.dp))
+        Column {
+            Text(
+                text = "FilamentSense",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Text(
+                text = stateLabel,
+                style = MaterialTheme.typography.bodySmall,
+                color = dotColor,
+                fontWeight = FontWeight.Medium,
+            )
+        }
+    }
+}
+
+@Composable
+private fun LastSyncRow(lastSyncMs: Long?) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text(
+            text = "⏱",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Spacer(Modifier.width(8.dp))
+        Column {
+            Text(
+                text = "Синхронізація",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Text(
+                text = formatSyncTime(lastSyncMs),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
+
+@Composable
 private fun TempRow(label: String, current: Float?, target: Int?) {
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -460,9 +538,9 @@ private fun HeatBedBottomSheet(
             )
             Spacer(Modifier.height(4.dp))
             val stepHint = if (currentBedTemp != null)
-                "Нагрів від поточних ${currentBedTemp}°C по 9°C кожні 12 сек"
+                "Нагрів від поточних ${currentBedTemp}°C по 9°C кожні 15 сек"
             else
-                "Нагрів від поточної температури по 9°C кожні 12 сек"
+                "Нагрів від поточної температури по 9°C кожні 15 сек"
             Text(
                 text = stepHint,
                 style = MaterialTheme.typography.bodySmall.copy(fontSize = 13.sp),
@@ -504,7 +582,7 @@ private fun HeatBedBottomSheet(
             Slider(
                 value = sliderValue,
                 onValueChange = { sliderValue = it },
-                valueRange = 25f..110f,
+                valueRange = 0f..110f,
                 steps = 0,
                 modifier = Modifier.fillMaxWidth(),
             )
@@ -512,7 +590,7 @@ private fun HeatBedBottomSheet(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
             ) {
-                Text("25°C", style = MaterialTheme.typography.labelSmall,
+                Text("0°C", style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Text("110°C", style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -626,7 +704,7 @@ private fun ReprintBottomSheet(
                     Spacer(Modifier.height(6.dp))
                 }
                 Text(
-                    text = "Стіл буде поступово прогрітий до 61°C перед початком друку.",
+                    text = "Стіл буде поступово прогрітий до 55°C перед початком друку.",
                     style = MaterialTheme.typography.bodySmall.copy(fontSize = 13.sp),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     textAlign = TextAlign.Center,

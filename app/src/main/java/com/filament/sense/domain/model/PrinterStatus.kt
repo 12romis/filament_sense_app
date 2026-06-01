@@ -11,4 +11,5 @@ data class PrinterStatus(
     val remainingMinutes: Int = 0,    // estimated remaining time, minutes
     val layerNum: Int = 0,            // current layer
     val totalLayers: Int = 0,         // total layers
+    val printError: Int? = null,      // print_error code from printer, null = no error
 )

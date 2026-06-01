@@ -125,6 +125,7 @@ object BleDataParser {
                 remainingMinutes = obj.optInt("rem", 0),
                 layerNum = obj.optInt("ly", 0),
                 totalLayers = obj.optInt("tly", 0),
+                printError = if (obj.has("err")) obj.optInt("err").takeIf { it != 0 } else null,
             )
         } catch (_: Exception) {
             null

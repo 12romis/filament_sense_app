@@ -152,6 +152,39 @@ fun PrinterScreen(
                 Spacer(Modifier.height(8.dp))
             }
 
+            // ── Print error banner ───────────────────────────────────────────
+            val printError = if (isConnected) status?.printError else null
+            if (printError != null) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 4.dp)
+                        .background(
+                            color = MaterialTheme.colorScheme.errorContainer,
+                            shape = RoundedCornerShape(12.dp),
+                        )
+                        .padding(horizontal = 16.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text("🚨", style = MaterialTheme.typography.bodyLarge)
+                    Spacer(Modifier.width(10.dp))
+                    Column {
+                        Text(
+                            text = "Помилка принтера",
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onErrorContainer,
+                        )
+                        Text(
+                            text = "Код: 0x%08X".format(printError),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onErrorContainer,
+                        )
+                    }
+                }
+                Spacer(Modifier.height(4.dp))
+            }
+
             // ── Printer identity card ────────────────────────────────────────
             ElevatedCard(
                 modifier = Modifier

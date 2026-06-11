@@ -7,6 +7,7 @@ import com.filament.sense.data.ble.BleManager
 import com.filament.sense.domain.model.DeviceState
 import com.filament.sense.domain.model.PrinterStatus
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -46,6 +47,10 @@ class PrinterViewModel @Inject constructor(
     }
 
     fun requestFilesList() {
-        bleManager.sendCommand(BleDataParser.buildListFilesCmd())
+        viewModelScope.launch {
+            bleManager.sendCommand(BleDataParser.buildListFilesCmd())
+            delay(400)
+            bleManager.readFilesList()
+        }
     }
 }

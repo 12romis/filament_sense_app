@@ -745,8 +745,8 @@ private fun ReprintBottomSheet(
                     Spacer(Modifier.height(4.dp))
                     Text(
                         text = fileName,
-                        style = MaterialTheme.typography.bodyMedium.copy(fontSize = 15.sp),
-                        fontWeight = FontWeight.Medium,
+                        style = MaterialTheme.typography.bodySmall.copy(fontSize = 13.sp),
+                        fontWeight = FontWeight.Normal,
                         color = MaterialTheme.colorScheme.onSurface,
                         textAlign = TextAlign.Center,
                         maxLines = 2,
@@ -770,7 +770,8 @@ private fun ReprintBottomSheet(
                         onValueChange = { fileOverride = it; dropdownExpanded = false },
                         label = { Text("Файл для друку") },
                         placeholder = { Text("myfile_plate_2.gcode") },
-                        singleLine = true,
+                        maxLines = 2,
+                        textStyle = MaterialTheme.typography.bodySmall.copy(fontSize = 12.sp),
                         trailingIcon = {
                             if (filesList.isNotEmpty())
                                 ExposedDropdownMenuDefaults.TrailingIcon(dropdownExpanded)

@@ -280,4 +280,10 @@ class BleManager @Inject constructor(
             )
         } catch (_: Exception) {}
     }
+
+    fun readFilesList() {
+        try {
+            connectedPeripheral?.readCharacteristic(GattConstants.SERVICE_UUID, GattConstants.FILES_LIST_UUID)
+        } catch (_: Exception) {}
+    }
 }

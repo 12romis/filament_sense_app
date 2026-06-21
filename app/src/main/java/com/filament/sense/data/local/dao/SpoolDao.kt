@@ -1,9 +1,8 @@
 package com.filament.sense.data.local.dao
 
 import androidx.room.Dao
-import androidx.room.Insert
-import androidx.room.OnConflictStrategy
 import androidx.room.Query
+import androidx.room.Upsert
 import com.filament.sense.data.local.entity.SpoolEntity
 import kotlinx.coroutines.flow.Flow
 
@@ -19,10 +18,10 @@ interface SpoolDao {
     @Query("SELECT * FROM spools WHERE isActive = 1 LIMIT 1")
     suspend fun getActiveSpool(): SpoolEntity?
 
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    @Upsert
     suspend fun upsert(spool: SpoolEntity)
 
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    @Upsert
     suspend fun upsertAll(spools: List<SpoolEntity>)
 
     @Query("DELETE FROM spools WHERE id = :id")

@@ -24,6 +24,7 @@ import com.filament.sense.ui.util.formatWeight
 import com.patrykandpatrick.vico.compose.cartesian.CartesianChartHost
 import com.patrykandpatrick.vico.compose.cartesian.axis.rememberBottom
 import com.patrykandpatrick.vico.compose.cartesian.axis.rememberStart
+import com.patrykandpatrick.vico.compose.cartesian.layer.rememberLine
 import com.patrykandpatrick.vico.compose.cartesian.layer.rememberLineCartesianLayer
 import com.patrykandpatrick.vico.compose.cartesian.rememberCartesianChart
 import com.patrykandpatrick.vico.compose.cartesian.rememberVicoScrollState
@@ -33,10 +34,22 @@ import com.patrykandpatrick.vico.core.cartesian.axis.VerticalAxis
 import com.patrykandpatrick.vico.core.cartesian.data.CartesianChartModelProducer
 import com.patrykandpatrick.vico.core.cartesian.data.CartesianValueFormatter
 import com.patrykandpatrick.vico.core.cartesian.data.lineSeries
+import com.patrykandpatrick.vico.core.cartesian.layer.LineCartesianLayer
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
 import java.util.Locale
+
+private const val DAY_MS = 24L * 60 * 60 * 1000L
+
+// Якщо між двома сусідніми днями пробіл > порогу — розриваємо лінію
+private const val GAP_THRESHOLD_DAYS = 1.5
+
+private data class DayData(
+    val dayIndex: Long,  // днів з епохи (вісь X)
+    val dayMs: Long,     // timestamp опівночі (підпис)
+    val weight: Float,   // останній вимір дня (не середнє)
+)
 
 @Composable
 fun WeightHistoryChart(
@@ -44,7 +57,8 @@ fun WeightHistoryChart(
     modifier: Modifier = Modifier,
     emptyHint: String = "Недостатньо даних",
 ) {
-    val dailyMeasurements = remember(measurements) {
+    // Групуємо по календарному дню; беремо останній вимір дня (найактуальніше значення)
+    val dailyData = remember(measurements) {
         measurements
             .groupBy { m ->
                 val cal = Calendar.getInstance()
@@ -56,27 +70,45 @@ fun WeightHistoryChart(
                 cal.timeInMillis
             }
             .map { (dayMs, list) ->
-                Measurement(
-                    spoolIndex = list.first().spoolIndex,
-                    remainingGrams = list.map { it.remainingGrams }.average().toFloat(),
-                    temperature = null,
-                    humidity = null,
-                    timestamp = dayMs,
+                DayData(
+                    dayIndex = dayMs / DAY_MS,
+                    dayMs = dayMs,
+                    weight = list.maxBy { it.timestamp }.remainingGrams,
                 )
             }
-            .sortedBy { it.timestamp }
+            .sortedBy { it.dayMs }
+    }
+
+    // Розбиваємо на безперервні сегменти: кожен пробіл > 1.5 дня → розрив лінії
+    val segments = remember(dailyData) {
+        if (dailyData.isEmpty()) return@remember emptyList<List<DayData>>()
+        val result = mutableListOf<List<DayData>>()
+        var current = mutableListOf(dailyData.first())
+        for (i in 1 until dailyData.size) {
+            val gap = (dailyData[i].dayIndex - dailyData[i - 1].dayIndex).toDouble()
+            if (gap > GAP_THRESHOLD_DAYS) {
+                result += current.toList()
+                current = mutableListOf()
+            }
+            current += dailyData[i]
+        }
+        result += current.toList()
+        result
     }
 
     val modelProducer = remember { CartesianChartModelProducer() }
 
-    LaunchedEffect(dailyMeasurements) {
-        if (dailyMeasurements.size >= 2) {
+    LaunchedEffect(segments) {
+        if (dailyData.size >= 2) {
             modelProducer.runTransaction {
                 lineSeries {
-                    series(
-                        x = dailyMeasurements.indices.map { it.toDouble() },
-                        y = dailyMeasurements.map { it.remainingGrams.toDouble() },
-                    )
+                    // Кожен сегмент — окрема series(); між ними Vico не малює лінію
+                    segments.forEach { segment ->
+                        series(
+                            x = segment.map { it.dayIndex.toDouble() },
+                            y = segment.map { it.weight.toDouble() },
+                        )
+                    }
                 }
             }
         }
@@ -84,14 +116,10 @@ fun WeightHistoryChart(
 
     val sdf = remember { SimpleDateFormat("dd.MM", Locale.getDefault()) }
 
-    val xFormatter = remember(dailyMeasurements) {
-        if (dailyMeasurements.size < 2) {
-            CartesianValueFormatter.decimal()
-        } else {
-            CartesianValueFormatter { _, value, _ ->
-                val idx = value.toInt().coerceIn(dailyMeasurements.indices)
-                sdf.format(Date(dailyMeasurements[idx].timestamp))
-            }
+    // X — реальний номер дня (dayIndex), форматуємо у дату
+    val xFormatter = remember {
+        CartesianValueFormatter { _, value, _ ->
+            sdf.format(Date(value.toLong() * DAY_MS))
         }
     }
 
@@ -100,6 +128,10 @@ fun WeightHistoryChart(
     }
 
     val scrollState = rememberVicoScrollState(initialScroll = Scroll.Absolute.End)
+
+    // Одна Line для всіх сегментів → однаковий колір, розриви лише між series()
+    val line = LineCartesianLayer.rememberLine()
+    val lineProvider = remember(line) { LineCartesianLayer.LineProvider.series(line) }
 
     Column(
         modifier = modifier
@@ -115,7 +147,7 @@ fun WeightHistoryChart(
         )
         Spacer(modifier = Modifier.height(8.dp))
 
-        if (dailyMeasurements.size < 2) {
+        if (dailyData.size < 2) {
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -132,7 +164,7 @@ fun WeightHistoryChart(
         } else {
             CartesianChartHost(
                 chart = rememberCartesianChart(
-                    rememberLineCartesianLayer(),
+                    rememberLineCartesianLayer(lineProvider = lineProvider),
                     startAxis = VerticalAxis.rememberStart(valueFormatter = yFormatter),
                     bottomAxis = HorizontalAxis.rememberBottom(
                         valueFormatter = xFormatter,

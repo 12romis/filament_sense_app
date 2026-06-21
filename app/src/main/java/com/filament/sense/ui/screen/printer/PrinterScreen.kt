@@ -82,6 +82,7 @@ fun PrinterScreen(
     val deviceState by viewModel.deviceState.collectAsStateWithLifecycle()
     val status by viewModel.printerStatus.collectAsStateWithLifecycle()
     val lastSyncTime by viewModel.lastSyncTime.collectAsStateWithLifecycle()
+    val totalPrintMinutes by viewModel.totalPrintMinutes.collectAsStateWithLifecycle()
     val filesList by viewModel.filesList.collectAsStateWithLifecycle()
     val isConnected = deviceState == DeviceState.CONNECTED
 
@@ -303,15 +304,27 @@ fun PrinterScreen(
                                 color = MaterialTheme.colorScheme.onSurface,
                             )
                         }
-                        // Remaining time
+                        // Remaining / total time
                         Column(horizontalAlignment = Alignment.End) {
                             Text(
                                 text = "Залишилось",
                                 style = MaterialTheme.typography.bodySmall.copy(fontSize = 13.sp),
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
-                            val timeText = if (isConnected && status != null)
-                                formatRemainingTime(status!!.remainingMinutes) else "—"
+                            val timeText = if (isConnected && status != null) {
+                                val remaining = formatRemainingTime(status!!.remainingMinutes)
+                                // Якщо є зафіксований час — точне значення; інакше розрахунок
+                                val pct = status!!.progress
+                                val knownTotal = totalPrintMinutes
+                                val total = knownTotal
+                                    ?: if (pct in 1..99) status!!.remainingMinutes * 100 / (100 - pct) else null
+                                if (total != null && total > 0) {
+                                    val prefix = if (knownTotal == null) "~" else ""
+                                    "$remaining / $prefix${formatRemainingTime(total)}"
+                                } else {
+                                    remaining
+                                }
+                            } else "—"
                             Text(
                                 text = timeText,
                                 style = MaterialTheme.typography.bodyMedium.copy(fontSize = 15.sp),

@@ -104,14 +104,6 @@ fun HomeScreen(
                 )
             }
 
-            // ── Connection status banner (тільки коли пристрій відомий системі) ──
-            val showBanner = state.deviceState == DeviceState.CONNECTED ||
-                             state.deviceState == DeviceState.CONNECTING
-            if (showBanner) {
-                ConnectionBanner(deviceState = state.deviceState)
-                Spacer(modifier = Modifier.height(12.dp))
-            }
-
             // SCANNING також вважається "немає пристрою" — запобігає флешу при
             // поверненні зі ScanScreen поки StateFlow ще не оновився
             val isEmptyState = state.deviceState == DeviceState.DISCONNECTED ||
@@ -253,52 +245,6 @@ private fun ReconnectState(
         ) {
             Text("Шукати пристрій", style = MaterialTheme.typography.titleSmall.copy(fontSize = 15.sp))
         }
-    }
-}
-
-// ── Connection banner ────────────────────────────────────────────────────────
-
-@Composable
-private fun ConnectionBanner(deviceState: DeviceState) {
-    val bgColor by animateColorAsState(
-        targetValue = when (deviceState) {
-            DeviceState.CONNECTED -> StatusConnectedBg
-            DeviceState.CONNECTING, DeviceState.SCANNING -> Color(0xFF1A2A1A)
-            DeviceState.DISCONNECTED -> Color(0xFF2A1010)
-        },
-        label = "bannerBg",
-    )
-    val dotColor = when (deviceState) {
-        DeviceState.CONNECTED -> StatusConnected
-        DeviceState.CONNECTING, DeviceState.SCANNING -> Color(0xFFFFB300)
-        DeviceState.DISCONNECTED -> MaterialTheme.colorScheme.error
-    }
-    val label = when (deviceState) {
-        DeviceState.CONNECTED -> "Підключено"
-        DeviceState.CONNECTING -> "Підключення..."
-        DeviceState.SCANNING -> "Пошук..."
-        DeviceState.DISCONNECTED -> "Не підключено"
-    }
-
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(bgColor)
-            .padding(horizontal = 16.dp, vertical = 10.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Box(
-            modifier = Modifier
-                .size(8.dp)
-                .clip(CircleShape)
-                .background(dotColor),
-        )
-        Spacer(modifier = Modifier.width(8.dp))
-        Text(
-            text = label,
-            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium),
-            color = dotColor,
-        )
     }
 }
 
@@ -462,7 +408,7 @@ private fun DeviceCard(
                           else Color(0xFF1A2A1A)
             val badgeDot = if (deviceState == DeviceState.CONNECTED) StatusConnected
                            else Color(0xFFFFB300)
-            val badgeText = if (deviceState == DeviceState.CONNECTED) "Активний"
+            val badgeText = if (deviceState == DeviceState.CONNECTED) "Підключено"
                             else "Підключається..."
             Row(
                 modifier = Modifier

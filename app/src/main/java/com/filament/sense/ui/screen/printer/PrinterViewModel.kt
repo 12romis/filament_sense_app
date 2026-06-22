@@ -26,22 +26,10 @@ class PrinterViewModel @Inject constructor(
     private val _lastSyncTime = MutableStateFlow<Long?>(null)
     val lastSyncTime: StateFlow<Long?> = _lastSyncTime.asStateFlow()
 
-    // Загальний час друку: фіксується при переході → RUNNING; null = не відомо (буде розраховано)
-    private val _totalPrintMinutes = MutableStateFlow<Int?>(null)
-    val totalPrintMinutes: StateFlow<Int?> = _totalPrintMinutes.asStateFlow()
-
     init {
         viewModelScope.launch {
-            var prevState = ""
             bleManager.printerStatus.collect { status ->
-                if (status != null) {
-                    _lastSyncTime.value = System.currentTimeMillis()
-                    val state = status.gcodeState
-                    if (prevState != "RUNNING" && state == "RUNNING") {
-                        _totalPrintMinutes.value = status.remainingMinutes
-                    }
-                    prevState = state
-                }
+                if (status != null) _lastSyncTime.value = System.currentTimeMillis()
             }
         }
     }

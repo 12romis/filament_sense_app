@@ -1,0 +1,7 @@
+app/screens/
+app/build/
+app/src/main/res/
+*.png
+*.jpg
+*.jpeg
+*.md

@@ -26,4 +26,21 @@ interface SpoolDao {
 
     @Query("DELETE FROM spools WHERE id = :id")
     suspend fun deleteById(id: Int)
+
+    @Query("""
+        UPDATE spools SET
+            grossWeightGrams = :grossWeight,
+            remainingGrams   = :remaining,
+            hasFilament      = :hasFilament,
+            syncTimestamp    = :syncTs,
+            baselineTimestamp = :baselineTs
+        WHERE isActive = 1
+    """)
+    suspend fun updateActiveTelemetry(
+        grossWeight: Float,
+        remaining: Float,
+        hasFilament: Boolean,
+        syncTs: Long,
+        baselineTs: Long?,
+    )
 }

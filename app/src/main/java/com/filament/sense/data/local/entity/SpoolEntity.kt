@@ -18,4 +18,11 @@ data class SpoolEntity(
     val baselineWeight: Float = 0f,
     val isActive: Boolean = false,
     val startDate: Long? = null,
+    // Телеметрія — зберігається при кожному BLE-оновленні для активної котушки,
+    // щоб дані не зникали після зміни активної котушки.
+    val grossWeightGrams: Float = 0f,
+    val remainingGrams: Float = 0f,
+    val hasFilament: Boolean = false,
+    val syncTimestamp: Long? = null,
+    val baselineTimestamp: Long? = null,
 )

@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.SharedPreferences
 import androidx.room.Room
 import com.filament.sense.data.local.AppDatabase
+import com.filament.sense.data.local.MIGRATION_2_3
 import com.filament.sense.data.local.dao.MeasurementDao
 import com.filament.sense.data.local.dao.SpoolDao
 import com.filament.sense.data.repository.DeviceRepositoryImpl
@@ -39,7 +40,7 @@ abstract class AppModule {
                 context,
                 AppDatabase::class.java,
                 "filament_sense.db",
-            ).fallbackToDestructiveMigration().build()
+            ).addMigrations(MIGRATION_2_3).fallbackToDestructiveMigration().build()
 
         @Provides
         @Singleton

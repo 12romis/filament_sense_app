@@ -97,13 +97,22 @@ class SpoolRepositoryImpl @Inject constructor(
                 // grossWeightGrams == 0 означає неготовність GATT (ESP32 ще не виміряв
                 // після reconnect). Ігноруємо такі пакети щоб не затирати валідні дані.
                 if (update.grossWeightGrams <= 0f) return@collect
+                val syncTs = System.currentTimeMillis()
                 _liveBleData.value = BleSpoolData(
                     remainingGrams = update.remainingGrams,
                     grossWeightGrams = update.grossWeightGrams,
                     hasFilament = update.hasFilament,
                     baselineWeight = update.baselineWeight,
                     baselineTimestamp = update.baselineTimestamp,
-                    syncTimestamp = System.currentTimeMillis(),
+                    syncTimestamp = syncTs,
+                )
+                // Зберігаємо телеметрію в БД — щоб дані не зникали після зміни активної котушки
+                spoolDao.updateActiveTelemetry(
+                    grossWeight = update.grossWeightGrams,
+                    remaining = update.remainingGrams,
+                    hasFilament = update.hasFilament,
+                    syncTs = syncTs,
+                    baselineTs = update.baselineTimestamp,
                 )
             }
         }
@@ -195,6 +204,11 @@ class SpoolRepositoryImpl @Inject constructor(
                 baselineWeight = baselineWeight,
                 isActive = existing?.isActive ?: false,
                 startDate = existing?.startDate ?: System.currentTimeMillis(),
+                grossWeightGrams = existing?.grossWeightGrams ?: 0f,
+                remainingGrams = existing?.remainingGrams ?: 0f,
+                hasFilament = existing?.hasFilament ?: false,
+                syncTimestamp = existing?.syncTimestamp,
+                baselineTimestamp = existing?.baselineTimestamp,
             )
         )
         bleManager.sendCommand(BleDataParser.buildSetNameCmd(0, name))
@@ -244,6 +258,11 @@ class SpoolRepositoryImpl @Inject constructor(
         baselineWeight = baselineWeight,
         isActive = isActive,
         startDate = startDate,
+        grossWeightGrams = grossWeightGrams,
+        remainingGrams = remainingGrams,
+        hasFilament = hasFilament,
+        syncTimestamp = syncTimestamp,
+        baselineTimestamp = baselineTimestamp,
     )
 
     private fun MeasurementEntity.toDomain() = Measurement(

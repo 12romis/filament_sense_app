@@ -16,7 +16,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -30,9 +29,6 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -40,7 +36,6 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -53,7 +48,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -64,6 +58,7 @@ import com.filament.sense.domain.model.Measurement
 import com.filament.sense.ui.components.BottomNav
 import com.filament.sense.ui.components.DataRow
 import com.filament.sense.ui.components.EnvDataCard
+import com.filament.sense.ui.components.EnvHistoryChart
 import com.filament.sense.ui.components.ThresholdBar
 import com.filament.sense.ui.components.WeightHistoryChart
 import com.filament.sense.ui.util.formatWeight
@@ -241,9 +236,48 @@ fun SpoolDetailScreen(
 
             Spacer(modifier = Modifier.height(12.dp))
 
-            var editingThreshold by remember { mutableStateOf<ThresholdType?>(null) }
-            var editingValue by remember { mutableStateOf("") }
+            // ── Active toggle ────────────────────────────────────────────
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(MaterialTheme.colorScheme.secondaryContainer)
+                    .padding(horizontal = 16.dp, vertical = 14.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = "Активна котушка для пристрою",
+                    style = MaterialTheme.typography.bodyMedium.copy(
+                        fontWeight = FontWeight.Medium,
+                        fontSize = 15.sp,
+                    ),
+                    color = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.weight(1f),
+                )
+                Switch(
+                    checked = spool.isActive,
+                    onCheckedChange = { enabled ->
+                        if (spool.isActive && !enabled) {
+                            scope.launch {
+                                snackbarHostState.showSnackbar(
+                                    "Недоступно. Активуйте іншу котушку — ця стане неактивною автоматично"
+                                )
+                            }
+                        } else if (!spool.isActive && enabled) {
+                            viewModel.onToggleActive(id, spool.isActive)
+                        }
+                    },
+                    colors = SwitchDefaults.colors(
+                        checkedThumbColor = MaterialTheme.colorScheme.onPrimary,
+                        checkedTrackColor = MaterialTheme.colorScheme.primary,
+                    ),
+                )
+            }
 
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // ── Thresholds ───────────────────────────────────────────────
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -262,95 +296,45 @@ fun SpoolDetailScreen(
                     color = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f),
                 )
                 DataRow(
-                    icon = "⚠️", label = ThresholdType.WARNING.label, value = "${state.thresholdWarning.formatWeight()} г",
-                    fontSize = 14,
-                    onEdit = { editingThreshold = ThresholdType.WARNING; editingValue = state.thresholdWarning.toString() },
+                    icon = "⚠️", label = ThresholdType.WARNING.label,
+                    value = "${state.thresholdWarning.formatWeight()} г", fontSize = 14,
+                    // onEdit = { } — тимчасово вимкнено
                 )
                 Spacer(modifier = Modifier.height(10.dp))
                 DataRow(
-                    icon = "🔴", label = ThresholdType.CRITICAL.label, value = "${state.thresholdCritical.formatWeight()} г",
-                    fontSize = 14,
-                    onEdit = { editingThreshold = ThresholdType.CRITICAL; editingValue = state.thresholdCritical.toString() },
+                    icon = "🔴", label = ThresholdType.CRITICAL.label,
+                    value = "${state.thresholdCritical.formatWeight()} г", fontSize = 14,
+                    // onEdit = { } — тимчасово вимкнено
                 )
                 Spacer(modifier = Modifier.height(10.dp))
                 DataRow(
-                    icon = "💀", label = ThresholdType.EMPTY.label, value = "${state.thresholdEmpty.formatWeight()} г",
-                    fontSize = 14,
-                    onEdit = { editingThreshold = ThresholdType.EMPTY; editingValue = state.thresholdEmpty.toString() },
+                    icon = "💀", label = ThresholdType.EMPTY.label,
+                    value = "${state.thresholdEmpty.formatWeight()} г", fontSize = 14,
+                    // onEdit = { } — тимчасово вимкнено
                 )
-            }
-
-            if (editingThreshold != null) {
-                val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-                ModalBottomSheet(
-                    onDismissRequest = { editingThreshold = null },
-                    sheetState = sheetState,
-                    containerColor = MaterialTheme.colorScheme.surface,
-                ) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 24.dp)
-                            .padding(bottom = 32.dp),
-                    ) {
-                        Text(
-                            text = "Зміна значення порогу «${editingThreshold!!.label}»",
-                            style = MaterialTheme.typography.titleMedium,
-                            color = MaterialTheme.colorScheme.onSurface,
-                        )
-                        Spacer(modifier = Modifier.height(16.dp))
-                        OutlinedTextField(
-                            value = editingValue,
-                            onValueChange = { v -> if (v.length <= 5) editingValue = v },
-                            modifier = Modifier.fillMaxWidth(),
-                            label = { Text("Значення") },
-                            suffix = { Text("г", style = MaterialTheme.typography.bodyMedium) },
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                            singleLine = true,
-                            colors = OutlinedTextFieldDefaults.colors(
-                                focusedBorderColor = MaterialTheme.colorScheme.primary,
-                                unfocusedBorderColor = MaterialTheme.colorScheme.outline,
-                            ),
-                        )
-                        Spacer(modifier = Modifier.height(20.dp))
-                        Row(modifier = Modifier.fillMaxWidth()) {
-                            TextButton(
-                                onClick = { editingThreshold = null },
-                                modifier = Modifier.weight(1f),
-                            ) {
-                                Text("Скасувати")
-                            }
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Button(
-                                onClick = {
-                                    val newVal = editingValue.toIntOrNull() ?: return@Button
-                                    val w = if (editingThreshold == ThresholdType.WARNING) newVal else state.thresholdWarning
-                                    val c = if (editingThreshold == ThresholdType.CRITICAL) newVal else state.thresholdCritical
-                                    val e = if (editingThreshold == ThresholdType.EMPTY) newVal else state.thresholdEmpty
-                                    viewModel.updateThresholds(w, c, e)
-                                    editingThreshold = null
-                                },
-                                modifier = Modifier.weight(1f),
-                            ) {
-                                Text("Зберегти")
-                            }
-                        }
-                    }
-                }
             }
 
             Spacer(modifier = Modifier.height(12.dp))
 
-            state.envData?.let { env ->
-                EnvDataCard(
-                    envData = env,
-                    modifier = Modifier.padding(horizontal = 16.dp),
-                )
-                Spacer(modifier = Modifier.height(12.dp))
+            if (spool.isActive) {
+                state.envData?.let { env ->
+                    EnvDataCard(
+                        envData = env,
+                        modifier = Modifier.padding(horizontal = 16.dp),
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                }
             }
 
-            // ── History chart ────────────────────────────────────────────
+            // ── History charts ───────────────────────────────────────────
             WeightHistoryChart(
+                measurements = state.measurements,
+                modifier = Modifier.padding(horizontal = 16.dp),
+            )
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            EnvHistoryChart(
                 measurements = state.measurements,
                 modifier = Modifier.padding(horizontal = 16.dp),
             )
@@ -408,46 +392,7 @@ fun SpoolDetailScreen(
                 Spacer(modifier = Modifier.height(12.dp))
             }
 
-            // ── Active toggle ────────────────────────────────────────────
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp)
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(MaterialTheme.colorScheme.secondaryContainer)
-                    .padding(horizontal = 16.dp, vertical = 14.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(
-                    text = "Активна котушка для пристрою",
-                    style = MaterialTheme.typography.bodyMedium.copy(
-                        fontWeight = FontWeight.Medium,
-                        fontSize = 15.sp,
-                    ),
-                    color = MaterialTheme.colorScheme.onSurface,
-                    modifier = Modifier.weight(1f),
-                )
-                Switch(
-                    checked = spool.isActive,
-                    onCheckedChange = { enabled ->
-                        if (spool.isActive && !enabled) {
-                            scope.launch {
-                                snackbarHostState.showSnackbar(
-                                    "Недоступно. Активуйте іншу котушку — ця стане неактивною автоматично"
-                                )
-                            }
-                        } else if (!spool.isActive && enabled) {
-                            viewModel.onToggleActive(id, spool.isActive)
-                        }
-                    },
-                    colors = SwitchDefaults.colors(
-                        checkedThumbColor = MaterialTheme.colorScheme.onPrimary,
-                        checkedTrackColor = MaterialTheme.colorScheme.primary,
-                    ),
-                )
-            }
-
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(4.dp))
         }
 
         // ── "Зробити активною?" AlertDialog ──────────────────────────────

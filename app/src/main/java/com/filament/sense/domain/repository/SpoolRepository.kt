@@ -1,6 +1,7 @@
 package com.filament.sense.domain.repository
 
 import com.filament.sense.domain.model.ConfigData
+import com.filament.sense.domain.model.DeviceState
 import com.filament.sense.domain.model.EnvData
 import com.filament.sense.domain.model.Measurement
 import com.filament.sense.domain.model.SpoolSlot
@@ -13,6 +14,7 @@ interface SpoolRepository {
     val envData: StateFlow<EnvData?>
     val thresholds: StateFlow<Triple<Int, Int, Int>>
     val configData: StateFlow<ConfigData?>
+    val deviceState: StateFlow<DeviceState>
 
     suspend fun setActiveSpool(id: Int)
     suspend fun saveBaseline(id: Int)

@@ -8,6 +8,7 @@ import com.filament.sense.data.local.dao.SpoolDao
 import com.filament.sense.data.local.entity.MeasurementEntity
 import com.filament.sense.data.local.entity.SpoolEntity
 import com.filament.sense.domain.model.ConfigData
+import com.filament.sense.domain.model.DeviceState
 import com.filament.sense.domain.model.EnvData
 import com.filament.sense.domain.model.Measurement
 import com.filament.sense.domain.model.SpoolSlot
@@ -60,6 +61,7 @@ class SpoolRepositoryImpl @Inject constructor(
 
     override val envData: StateFlow<EnvData?> = bleManager.envData
     override val configData: StateFlow<ConfigData?> = bleManager.configData
+    override val deviceState: StateFlow<DeviceState> = bleManager.deviceState
 
     // Live BLE дані для активної котушки (null = немає підключення)
     private val _liveBleData = MutableStateFlow<BleSpoolData?>(null)
@@ -153,6 +155,9 @@ class SpoolRepositoryImpl @Inject constructor(
         entities.forEach { entity ->
             spoolDao.upsert(entity.copy(isActive = entity.id == id))
         }
+        val target = entities.find { it.id == id } ?: return
+        bleManager.sendCommand(BleDataParser.buildSetNameCmd(0, target.name))
+        bleManager.sendCommand(BleDataParser.buildSetTareCmd(0, target.baselineWeight, target.nominalWeightGrams))
     }
 
     override suspend fun saveBaseline(id: Int) {

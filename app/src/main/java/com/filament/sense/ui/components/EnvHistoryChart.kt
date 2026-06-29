@@ -20,7 +20,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.filament.sense.domain.model.Measurement
-import com.filament.sense.ui.util.formatWeight
 import com.patrykandpatrick.vico.compose.cartesian.CartesianChartHost
 import com.patrykandpatrick.vico.compose.cartesian.axis.rememberBottom
 import com.patrykandpatrick.vico.compose.cartesian.axis.rememberStart
@@ -39,47 +38,90 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
+private val sdfDateGlobal = SimpleDateFormat("dd.MM", Locale.getDefault())
+private val sdfHourGlobal = SimpleDateFormat("HH", Locale.getDefault())
+
 private const val BUCKET_3H_MS = 3L * 60 * 60 * 1000L
 
 // Розрив лінії якщо між бакетами пробіл більший за 1.5 бакети (4.5 год)
 private const val GAP_THRESHOLD_BUCKETS = 1.5
 
-private data class BucketData(
-    val bucketIndex: Long,  // порядковий номер бакету (timestamp / BUCKET_3H_MS)
-    val bucketMs: Long,     // мілісекунди початку бакету
-    val weight: Float,      // середній залишок за бакет
+private data class EnvBucket(
+    val bucketIndex: Long,   // порядковий номер бакету (timestamp / BUCKET_3H_MS)
+    val bucketMs: Long,      // мілісекунди початку бакету (для підпису осі X)
+    val temperature: Float?,
+    val humidity: Float?,
 )
 
 @Composable
-fun WeightHistoryChart(
+fun EnvHistoryChart(
     measurements: List<Measurement>,
     modifier: Modifier = Modifier,
-    emptyHint: String = "Недостатньо даних",
 ) {
     val buckets = remember(measurements) {
         measurements
             .groupBy { m -> (m.timestamp / BUCKET_3H_MS) * BUCKET_3H_MS }
             .map { (bucketMs, list) ->
-                BucketData(
+                val temps = list.mapNotNull { it.temperature }
+                val hums = list.mapNotNull { it.humidity }
+                EnvBucket(
                     bucketIndex = bucketMs / BUCKET_3H_MS,
                     bucketMs = bucketMs,
-                    weight = list.maxBy { it.timestamp }.remainingGrams,
+                    temperature = if (temps.isNotEmpty()) temps.average().toFloat() else null,
+                    humidity = if (hums.isNotEmpty()) hums.average().toFloat() else null,
                 )
             }
             .sortedBy { it.bucketMs }
     }
 
-    val segments = remember(buckets) {
-        if (buckets.isEmpty()) return@remember emptyList<List<BucketData>>()
-        val result = mutableListOf<List<BucketData>>()
-        var current = mutableListOf(buckets.first())
-        for (i in 1 until buckets.size) {
-            val gap = (buckets[i].bucketIndex - buckets[i - 1].bucketIndex).toDouble()
+    val xFormatter = remember {
+        CartesianValueFormatter { _, value, _ ->
+            val ts = value.toLong() * BUCKET_3H_MS
+            val date = Date(ts)
+            "${sdfDateGlobal.format(date)}·${sdfHourGlobal.format(date)}"
+        }
+    }
+
+    Column(modifier = modifier.fillMaxWidth()) {
+        SingleEnvChart(
+            title = "Температура",
+            buckets = buckets,
+            getValue = { it.temperature },
+            yFormatter = CartesianValueFormatter { _, v, _ -> "${v.toInt()}°C" },
+            xFormatter = xFormatter,
+        )
+        Spacer(modifier = Modifier.height(12.dp))
+        SingleEnvChart(
+            title = "Вологість",
+            buckets = buckets,
+            getValue = { it.humidity },
+            yFormatter = CartesianValueFormatter { _, v, _ -> "${v.toInt()}%" },
+            xFormatter = xFormatter,
+        )
+    }
+}
+
+@Composable
+private fun SingleEnvChart(
+    title: String,
+    buckets: List<EnvBucket>,
+    getValue: (EnvBucket) -> Float?,
+    yFormatter: CartesianValueFormatter,
+    xFormatter: CartesianValueFormatter,
+) {
+    val validBuckets = remember(buckets) { buckets.filter { getValue(it) != null } }
+
+    val segments = remember(validBuckets) {
+        if (validBuckets.isEmpty()) return@remember emptyList<List<EnvBucket>>()
+        val result = mutableListOf<List<EnvBucket>>()
+        var current = mutableListOf(validBuckets.first())
+        for (i in 1 until validBuckets.size) {
+            val gap = (validBuckets[i].bucketIndex - validBuckets[i - 1].bucketIndex).toDouble()
             if (gap > GAP_THRESHOLD_BUCKETS) {
                 result += current.toList()
                 current = mutableListOf()
             }
-            current += buckets[i]
+            current += validBuckets[i]
         }
         result += current.toList()
         result
@@ -88,13 +130,13 @@ fun WeightHistoryChart(
     val modelProducer = remember { CartesianChartModelProducer() }
 
     LaunchedEffect(segments) {
-        if (buckets.size >= 2) {
+        if (validBuckets.size >= 2) {
             modelProducer.runTransaction {
                 lineSeries {
                     segments.forEach { segment ->
                         series(
                             x = segment.map { it.bucketIndex.toDouble() },
-                            y = segment.map { it.weight.toDouble() },
+                            y = segment.map { getValue(it)!!.toDouble() },
                         )
                     }
                 }
@@ -102,48 +144,32 @@ fun WeightHistoryChart(
         }
     }
 
-    val sdfDate = remember { SimpleDateFormat("dd.MM", Locale.getDefault()) }
-    val sdfHour = remember { SimpleDateFormat("HH", Locale.getDefault()) }
-
-    val xFormatter = remember {
-        CartesianValueFormatter { _, value, _ ->
-            val ts = value.toLong() * BUCKET_3H_MS
-            val date = Date(ts)
-            "${sdfDate.format(date)}·${sdfHour.format(date)}"
-        }
-    }
-
-    val yFormatter = remember {
-        CartesianValueFormatter { _, value, _ -> "${value.toInt().formatWeight()} г" }
-    }
-
     val scrollState = rememberVicoScrollState(initialScroll = Scroll.Absolute.End)
     val line = LineCartesianLayer.rememberLine()
     val lineProvider = remember(line) { LineCartesianLayer.LineProvider.series(line) }
 
     Column(
-        modifier = modifier
+        modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(16.dp))
             .background(MaterialTheme.colorScheme.surface)
             .padding(16.dp),
     ) {
         Text(
-            text = "Залишок філаменту",
+            text = title,
             style = MaterialTheme.typography.bodyMedium.copy(fontSize = 15.sp),
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         Spacer(modifier = Modifier.height(8.dp))
-
-        if (buckets.size < 2) {
+        if (validBuckets.size < 2) {
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(120.dp),
+                    .height(100.dp),
                 contentAlignment = Alignment.Center,
             ) {
                 Text(
-                    text = emptyHint,
+                    text = "Недостатньо даних",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     textAlign = TextAlign.Center,
@@ -164,7 +190,7 @@ fun WeightHistoryChart(
                 scrollState = scrollState,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(180.dp),
+                    .height(160.dp),
             )
         }
     }

@@ -2,6 +2,7 @@ package com.filament.sense.ui.screen.spool
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.filament.sense.domain.model.DeviceState
 import com.filament.sense.domain.model.EnvData
 import com.filament.sense.domain.model.Measurement
 import com.filament.sense.domain.model.SpoolSlot
@@ -26,6 +27,7 @@ data class SpoolDetailUiState(
     val measurements: List<Measurement> = emptyList(),
     val envData: EnvData? = null,
     val showSetActiveDialog: Boolean = false,
+    val bleConnected: Boolean = false,
     val thresholdWarning: Int = 500,
     val thresholdCritical: Int = 100,
     val thresholdEmpty: Int = 10,
@@ -63,6 +65,11 @@ class SpoolDetailViewModel @Inject constructor(
                 _state.value = _state.value.copy(envData = env)
             }
         }
+        viewModelScope.launch {
+            spoolRepo.deviceState.collect { state ->
+                _state.value = _state.value.copy(bleConnected = state == DeviceState.CONNECTED)
+            }
+        }
     }
 
     fun loadSpool(id: Int) {
@@ -80,7 +87,13 @@ class SpoolDetailViewModel @Inject constructor(
 
     fun onToggleActive(id: Int, currentlyActive: Boolean) {
         if (!currentlyActive) {
-            _state.value = _state.value.copy(showSetActiveDialog = true)
+            if (!_state.value.bleConnected) {
+                _state.value = _state.value.copy(
+                    snackbarMessage = "Немає підключення до FilamentSense — неможливо передати дані котушки на пристрій"
+                )
+            } else {
+                _state.value = _state.value.copy(showSetActiveDialog = true)
+            }
         }
     }
 

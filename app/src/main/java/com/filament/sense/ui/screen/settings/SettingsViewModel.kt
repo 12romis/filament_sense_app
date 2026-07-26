@@ -1,6 +1,8 @@
 package com.filament.sense.ui.screen.settings
 
+import android.content.ContentResolver
 import android.content.SharedPreferences
+import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.filament.sense.domain.model.DeviceState
@@ -98,5 +100,33 @@ class SettingsViewModel @Inject constructor(
 
     fun clearSnackbar() {
         _state.value = _state.value.copy(snackbarMessage = null)
+    }
+
+    /** Експортує всі котушки у файл, обраний користувачем через SAF. */
+    fun exportSpoolsBackup(contentResolver: ContentResolver, uri: Uri) {
+        viewModelScope.launch {
+            try {
+                val json = spoolRepo.exportSpoolsJson()
+                contentResolver.openOutputStream(uri)?.use { it.write(json.toByteArray()) }
+                    ?: throw IllegalStateException("Не вдалося відкрити файл для запису")
+                _state.value = _state.value.copy(snackbarMessage = "Резервну копію збережено")
+            } catch (e: Exception) {
+                _state.value = _state.value.copy(snackbarMessage = "Помилка експорту: ${e.message}")
+            }
+        }
+    }
+
+    /** Замінює всі котушки вмістом обраного файлу резервної копії. Деструктивна дія. */
+    fun importSpoolsBackup(contentResolver: ContentResolver, uri: Uri) {
+        viewModelScope.launch {
+            try {
+                val json = contentResolver.openInputStream(uri)?.use { it.readBytes().decodeToString() }
+                    ?: throw IllegalStateException("Не вдалося відкрити файл для читання")
+                spoolRepo.importSpoolsJson(json)
+                _state.value = _state.value.copy(snackbarMessage = "Котушки відновлено з резервної копії")
+            } catch (e: Exception) {
+                _state.value = _state.value.copy(snackbarMessage = "Помилка імпорту: ${e.message}")
+            }
+        }
     }
 }

@@ -25,6 +25,16 @@ interface SpoolRepository {
     suspend fun setMqttHost(host: String)
     suspend fun sendManualReport()
 
+    /** Серіалізує всі котушки (без історії вимірювань) у портативний JSON-бекап. */
+    suspend fun exportSpoolsJson(): String
+
+    /**
+     * Відновлює котушки з JSON, створеного [exportSpoolsJson].
+     * Повністю замінює поточний вміст таблиці spools (деструктивно).
+     * @throws IllegalArgumentException якщо формат файлу невірний
+     */
+    suspend fun importSpoolsJson(json: String)
+
     fun getMeasurements(spoolId: Int, sinceMs: Long): Flow<List<Measurement>>
 
     /** Усереднені вимірювання по 8-годинних кошиках за останні [sinceMs] мс. */

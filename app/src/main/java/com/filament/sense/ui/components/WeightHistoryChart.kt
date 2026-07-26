@@ -41,8 +41,12 @@ import java.util.Locale
 
 private const val BUCKET_3H_MS = 3L * 60 * 60 * 1000L
 
-// Розрив лінії якщо між бакетами пробіл більший за 1.5 бакети (4.5 год)
-private const val GAP_THRESHOLD_BUCKETS = 1.5
+// Розрив лінії, якщо між сусідніми точками пробіл більший за 12 год.
+// Береться в реальному часі (а не в кількості бакетів графіка), бо стара історія
+// в БД ущільнюється до одного запису на 8-год кошик (SpoolRepositoryImpl.compactAllSpools) —
+// поріг має бути суттєво більшим за 8 год, інакше й звичайна ущільнена історія
+// (без жодного реального розриву підключення) хибно рвалась би на шматки.
+private const val GAP_THRESHOLD_MS = 12L * 60 * 60 * 1000L
 
 private data class BucketData(
     val bucketIndex: Long,  // порядковий номер бакету (timestamp / BUCKET_3H_MS)
@@ -74,8 +78,8 @@ fun WeightHistoryChart(
         val result = mutableListOf<List<BucketData>>()
         var current = mutableListOf(buckets.first())
         for (i in 1 until buckets.size) {
-            val gap = (buckets[i].bucketIndex - buckets[i - 1].bucketIndex).toDouble()
-            if (gap > GAP_THRESHOLD_BUCKETS) {
+            val gap = buckets[i].bucketMs - buckets[i - 1].bucketMs
+            if (gap > GAP_THRESHOLD_MS) {
                 result += current.toList()
                 current = mutableListOf()
             }

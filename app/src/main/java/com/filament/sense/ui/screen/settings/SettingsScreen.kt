@@ -2,11 +2,13 @@ package com.filament.sense.ui.screen.settings
 
 import android.Manifest
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -22,6 +24,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.OutlinedButton
@@ -38,7 +41,9 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -72,6 +77,19 @@ fun SettingsScreen(
     val notificationPermissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { granted -> viewModel.toggleNotifications(granted) }
+
+    val exportLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/json")
+    ) { uri: Uri? ->
+        uri?.let { viewModel.exportSpoolsBackup(context.contentResolver, it) }
+    }
+
+    var pendingImportUri by remember { mutableStateOf<Uri?>(null) }
+    val importLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri: Uri? ->
+        uri?.let { pendingImportUri = it }
+    }
 
     LaunchedEffect(Unit) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -275,6 +293,37 @@ fun SettingsScreen(
 
             Spacer(modifier = Modifier.height(12.dp))
 
+            // ── Картка Резервна копія ────────────────────────────────────
+            SettingsCard(title = "Резервна копія котушок") {
+                Text(
+                    text = "Зберігає налаштування котушок (назва, колір, вага) у файл поза застосунком — на випадок, якщо систему очистить дані застосунку.",
+                    style = MaterialTheme.typography.bodySmall.copy(fontSize = 13.sp),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    OutlinedButton(
+                        onClick = { exportLauncher.launch("filamentsense_spools_backup.json") },
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(12.dp),
+                    ) {
+                        Text("Експортувати")
+                    }
+                    OutlinedButton(
+                        onClick = { importLauncher.launch(arrayOf("application/json")) },
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(12.dp),
+                    ) {
+                        Text("Відновити")
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
             // ── Картка Застосунок ────────────────────────────────────────
             SettingsCard(title = "Застосунок") {
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -326,6 +375,36 @@ fun SettingsScreen(
 
             Spacer(modifier = Modifier.height(16.dp))
         }
+    }
+
+    // ── Підтвердження відновлення (деструктивна дія — замінює всі котушки) ──
+    pendingImportUri?.let { uri ->
+        AlertDialog(
+            onDismissRequest = { pendingImportUri = null },
+            title = { Text("Відновити з резервної копії?") },
+            text = {
+                Text("Це замінить усі поточні котушки даними з обраного файлу. Поточні дані буде втрачено. Продовжити?")
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        viewModel.importSpoolsBackup(context.contentResolver, uri)
+                        pendingImportUri = null
+                    },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.error,
+                        contentColor = MaterialTheme.colorScheme.onError,
+                    ),
+                ) {
+                    Text("Замінити")
+                }
+            },
+            dismissButton = {
+                OutlinedButton(onClick = { pendingImportUri = null }) {
+                    Text("Скасувати")
+                }
+            },
+        )
     }
 }
 

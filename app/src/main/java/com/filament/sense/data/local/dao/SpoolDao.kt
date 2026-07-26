@@ -27,6 +27,9 @@ interface SpoolDao {
     @Query("DELETE FROM spools WHERE id = :id")
     suspend fun deleteById(id: Int)
 
+    @Query("DELETE FROM spools")
+    suspend fun deleteAll()
+
     @Query("""
         UPDATE spools SET
             grossWeightGrams = :grossWeight,

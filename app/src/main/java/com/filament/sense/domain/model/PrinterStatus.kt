@@ -12,4 +12,5 @@ data class PrinterStatus(
     val layerNum: Int = 0,            // current layer
     val totalLayers: Int = 0,         // total layers
     val printError: Int? = null,      // print_error code from printer, null = no error
+    val filamentInExtruder: Boolean? = null,  // hw_switch_state; null = ще не отримано від принтера
 )

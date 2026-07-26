@@ -86,12 +86,19 @@ object BleDataParser {
 
     fun buildHeatBedCmd(target: Int) = """{"cmd":"heat_bed","target":$target}"""
 
+    fun buildHeatNozzleCmd(target: Int) = """{"cmd":"heat_nozzle","target":$target}"""
+
     fun buildReprintCmd(file: String = "") = if (file.isEmpty())
         """{"cmd":"reprint"}"""
     else
         """{"cmd":"reprint","file":"$file"}"""
 
     fun buildListFilesCmd() = """{"cmd":"list_files"}"""
+
+    fun buildLoadFilamentCmd(targetTempCelsius: Int = 220) =
+        """{"cmd":"load_filament","target_temp":$targetTempCelsius}"""
+
+    fun buildUnloadFilamentCmd() = """{"cmd":"unload_filament"}"""
 
     fun parseFilesList(bytes: ByteArray): List<String> {
         return try {
@@ -107,7 +114,7 @@ object BleDataParser {
     /**
      * Парсить JSON телеметрії принтера з PRINTER_STATUS_UUID:
      *   {"gs":"RUNNING","f":"file.3mf","nt":"254.9","ntt":255,
-     *    "bt":"65.0","btt":65,"pct":67,"rem":22,"ly":95,"tly":166}
+     *    "bt":"65.0","btt":65,"pct":67,"rem":22,"ly":95,"tly":166,"fil":true}
      */
     fun parsePrinterStatus(bytes: ByteArray): PrinterStatus? {
         return try {
@@ -126,6 +133,7 @@ object BleDataParser {
                 layerNum = obj.optInt("ly", 0),
                 totalLayers = obj.optInt("tly", 0),
                 printError = if (obj.has("err")) obj.optInt("err").takeIf { it != 0 } else null,
+                filamentInExtruder = if (obj.has("fil")) obj.optBoolean("fil") else null,
             )
         } catch (_: Exception) {
             null

@@ -1,6 +1,13 @@
 package com.filament.sense.data.repository
 
+import android.content.ContentResolver
+import android.content.ContentUris
+import android.content.ContentValues
+import android.content.Context
 import android.content.SharedPreferences
+import android.os.Environment
+import android.provider.MediaStore
+import android.util.Log
 import com.filament.sense.data.ble.BleDataParser
 import com.filament.sense.data.ble.BleManager
 import com.filament.sense.data.local.dao.MeasurementDao
@@ -13,6 +20,7 @@ import com.filament.sense.domain.model.EnvData
 import com.filament.sense.domain.model.Measurement
 import com.filament.sense.domain.model.SpoolSlot
 import com.filament.sense.domain.repository.SpoolRepository
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -25,15 +33,25 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
+import org.json.JSONArray
+import org.json.JSONObject
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import javax.inject.Inject
 import javax.inject.Singleton
+
+private const val TAG = "SpoolRepository"
+private const val BACKUP_VERSION = 1
+private const val AUTO_BACKUP_SUBDIR = "FilamentSense"
+private const val AUTO_BACKUP_FILENAME_PREFIX = "filamentsense_spools_backup_"
+private const val AUTO_BACKUP_KEEP_COUNT = 5
 
 private const val MEASUREMENT_INTERVAL_MS = 5 * 60 * 1000L
 private const val MEASUREMENTS_PER_SPOOL = 1000
 
 private const val BUCKET_8H_MS      = 8L  * 60 * 60 * 1000L  // розмір кошика для агрегації
 private const val COMPACT_AFTER_MS  = 24L * 60 * 60 * 1000L  // ущільнювати дані старші за 24 год
-private const val COMPACT_PERIOD_MS = 8L  * 60 * 60 * 1000L  // запускати ущільнення кожні 8 год
 const val HISTORY_WINDOW_MS         = 30L * 24 * 60 * 60 * 1000L // вікно для home-графіку (30 днів)
 
 private const val PREF_THRESHOLD_WARNING = "threshold_warning"
@@ -55,6 +73,7 @@ class SpoolRepositoryImpl @Inject constructor(
     private val spoolDao: SpoolDao,
     private val measurementDao: MeasurementDao,
     private val prefs: SharedPreferences,
+    @ApplicationContext private val context: Context,
 ) : SpoolRepository {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -134,19 +153,26 @@ class SpoolRepositoryImpl @Inject constructor(
                     )
                 )
                 measurementDao.trimSpoolToLimit(active.id, MEASUREMENTS_PER_SPOOL)
+                // Ущільнення тут-таки (не окремим 8-год таймером): якщо процес довго
+                // не жив (наприклад, кілька днів без BLE-підключення), окремий цикл
+                // з delay(8h) міг би так ніколи й не спрацювати — а raw-записи тим часом
+                // накопичувались би і trimSpoolToLimit(1000) з'їдав би історію набагато
+                // швидше за очікувані ~30 днів.
+                compactAllSpools()
             }
         }
 
-        // Ущільнення: для даних старших за 24 год залишаємо лише один запис на 8-год кошик.
-        // Це дозволяє зберігати ~30 днів history в тому ж ліміті рядків (≈90 + 288 ≤ 1000).
-        scope.launch {
-            while (true) {
-                val cutoff = System.currentTimeMillis() - COMPACT_AFTER_MS
-                spoolDao.getAllSpools().first().forEach { entity ->
-                    measurementDao.compactOldMeasurements(entity.id, cutoff, BUCKET_8H_MS)
-                }
-                delay(COMPACT_PERIOD_MS)
-            }
+        // Одноразовий прохід одразу при старті — покриває випадок, коли попередній
+        // процес застосунку помер (наприклад, після 2 днів без підключення) і ущільнення
+        // не встигало відбутись раніше.
+        scope.launch { compactAllSpools() }
+    }
+
+    /** Для даних старших за 24 год залишає лише один запис на 8-год кошик (на котушку). */
+    private suspend fun compactAllSpools() {
+        val cutoff = System.currentTimeMillis() - COMPACT_AFTER_MS
+        spoolDao.getAllSpools().first().forEach { entity ->
+            measurementDao.compactOldMeasurements(entity.id, cutoff, BUCKET_8H_MS)
         }
     }
 
@@ -190,6 +216,7 @@ class SpoolRepositoryImpl @Inject constructor(
         )
         bleManager.sendCommand(BleDataParser.buildSetNameCmd(0, name))
         bleManager.sendCommand(BleDataParser.buildSetTareCmd(0, baselineWeight, nominalWeight))
+        autoBackupSpools()
     }
 
     override suspend fun updateSpoolConfig(
@@ -218,10 +245,12 @@ class SpoolRepositoryImpl @Inject constructor(
         )
         bleManager.sendCommand(BleDataParser.buildSetNameCmd(0, name))
         bleManager.sendCommand(BleDataParser.buildSetTareCmd(0, baselineWeight, nominalWeight))
+        autoBackupSpools()
     }
 
     override suspend fun deleteSpool(id: Int) {
         spoolDao.deleteById(id)
+        autoBackupSpools()
     }
 
     override suspend fun setThresholds(warning: Int, critical: Int, empty: Int) {
@@ -232,6 +261,121 @@ class SpoolRepositoryImpl @Inject constructor(
             .apply()
         _thresholds.value = Triple(warning, critical, empty)
         bleManager.sendCommand(BleDataParser.buildSetThresholdCmd(warning, critical, empty))
+    }
+
+    override suspend fun exportSpoolsJson(): String {
+        val entities = spoolDao.getAllSpools().first()
+        val spoolsArray = JSONArray()
+        entities.forEach { e ->
+            spoolsArray.put(
+                JSONObject().apply {
+                    put("id", e.id)
+                    put("name", e.name)
+                    put("colorArgb", e.colorArgb)
+                    put("nominalWeightGrams", e.nominalWeightGrams)
+                    put("baselineWeight", e.baselineWeight.toDouble())
+                    put("isActive", e.isActive)
+                    put("startDate", e.startDate ?: JSONObject.NULL)
+                    put("grossWeightGrams", e.grossWeightGrams.toDouble())
+                    put("remainingGrams", e.remainingGrams.toDouble())
+                    put("hasFilament", e.hasFilament)
+                    put("syncTimestamp", e.syncTimestamp ?: JSONObject.NULL)
+                    put("baselineTimestamp", e.baselineTimestamp ?: JSONObject.NULL)
+                }
+            )
+        }
+        return JSONObject().apply {
+            put("version", BACKUP_VERSION)
+            put("exportedAt", System.currentTimeMillis())
+            put("spools", spoolsArray)
+        }.toString(2)
+    }
+
+    override suspend fun importSpoolsJson(json: String) {
+        val root = try {
+            JSONObject(json)
+        } catch (e: Exception) {
+            throw IllegalArgumentException("Файл не є коректним JSON-бекапом", e)
+        }
+        val spoolsArray = root.optJSONArray("spools")
+            ?: throw IllegalArgumentException("У файлі відсутній список котушок")
+
+        val entities = (0 until spoolsArray.length()).map { i ->
+            val o = spoolsArray.getJSONObject(i)
+            SpoolEntity(
+                id = o.optInt("id", 0),
+                name = o.optString("name", ""),
+                colorArgb = o.optInt("colorArgb", -1),
+                nominalWeightGrams = o.optInt("nominalWeightGrams", 1000),
+                baselineWeight = o.optDouble("baselineWeight", 0.0).toFloat(),
+                isActive = o.optBoolean("isActive", false),
+                startDate = if (o.isNull("startDate")) null else o.optLong("startDate"),
+                grossWeightGrams = o.optDouble("grossWeightGrams", 0.0).toFloat(),
+                remainingGrams = o.optDouble("remainingGrams", 0.0).toFloat(),
+                hasFilament = o.optBoolean("hasFilament", false),
+                syncTimestamp = if (o.isNull("syncTimestamp")) null else o.optLong("syncTimestamp"),
+                baselineTimestamp = if (o.isNull("baselineTimestamp")) null else o.optLong("baselineTimestamp"),
+            )
+        }
+
+        spoolDao.deleteAll()
+        spoolDao.upsertAll(entities)
+    }
+
+    /**
+     * Тихо пише свіжу резервну копію в Downloads/FilamentSense/ після зміни котушки.
+     * Ніколи не кидає — збій бекапу не повинен ламати саму операцію створення/редагування.
+     */
+    private fun autoBackupSpools() {
+        scope.launch {
+            try {
+                writeAutoBackupFile(exportSpoolsJson())
+            } catch (e: Exception) {
+                Log.e(TAG, "auto-backup failed", e)
+            }
+        }
+    }
+
+    private fun autoBackupRelativePath() = "${Environment.DIRECTORY_DOWNLOADS}/$AUTO_BACKUP_SUBDIR/"
+
+    private fun writeAutoBackupFile(json: String) {
+        val timestamp = SimpleDateFormat("yyyy-MM-dd_HH-mm-ss", Locale.US).format(Date())
+        val fileName = "$AUTO_BACKUP_FILENAME_PREFIX$timestamp.json"
+
+        val resolver = context.contentResolver
+        val values = ContentValues().apply {
+            put(MediaStore.MediaColumns.DISPLAY_NAME, fileName)
+            put(MediaStore.MediaColumns.MIME_TYPE, "application/json")
+            put(MediaStore.MediaColumns.RELATIVE_PATH, autoBackupRelativePath())
+        }
+        val uri = resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values)
+            ?: throw IllegalStateException("insert() into MediaStore.Downloads returned null")
+        resolver.openOutputStream(uri)?.use { it.write(json.toByteArray()) }
+            ?: throw IllegalStateException("openOutputStream() returned null")
+        Log.d(TAG, "auto-backup written: $fileName")
+
+        pruneOldAutoBackups(resolver)
+    }
+
+    /** Лишає тільки [AUTO_BACKUP_KEEP_COUNT] найновіших авто-бекапів, видаляючи решту. */
+    private fun pruneOldAutoBackups(resolver: ContentResolver) {
+        val ids = mutableListOf<Long>()
+        resolver.query(
+            MediaStore.Downloads.EXTERNAL_CONTENT_URI,
+            arrayOf(MediaStore.MediaColumns._ID),
+            "${MediaStore.MediaColumns.RELATIVE_PATH} = ? AND ${MediaStore.MediaColumns.DISPLAY_NAME} LIKE ?",
+            arrayOf(autoBackupRelativePath(), "$AUTO_BACKUP_FILENAME_PREFIX%"),
+            "${MediaStore.MediaColumns.DISPLAY_NAME} ASC",
+        )?.use { cursor ->
+            val idCol = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns._ID)
+            while (cursor.moveToNext()) ids += cursor.getLong(idCol)
+        }
+
+        if (ids.size <= AUTO_BACKUP_KEEP_COUNT) return
+        ids.dropLast(AUTO_BACKUP_KEEP_COUNT).forEach { id ->
+            resolver.delete(ContentUris.withAppendedId(MediaStore.Downloads.EXTERNAL_CONTENT_URI, id), null, null)
+        }
+        Log.d(TAG, "auto-backup: pruned ${ids.size - AUTO_BACKUP_KEEP_COUNT} old file(s)")
     }
 
     override fun getSpoolById(id: Int): Flow<SpoolSlot?> =

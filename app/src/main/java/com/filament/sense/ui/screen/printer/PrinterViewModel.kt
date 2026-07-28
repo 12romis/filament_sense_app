@@ -60,7 +60,7 @@ class PrinterViewModel @Inject constructor(
         bleManager.sendCommand(BleDataParser.buildReprintCmd(fileOverride.trim()))
     }
 
-    fun loadFilament(targetTempCelsius: Int = 220) {
+    fun loadFilament(targetTempCelsius: Int = 250) {
         bleManager.sendCommand(BleDataParser.buildLoadFilamentCmd(targetTempCelsius))
     }
 

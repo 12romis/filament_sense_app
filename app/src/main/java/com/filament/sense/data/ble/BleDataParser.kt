@@ -95,7 +95,7 @@ object BleDataParser {
 
     fun buildListFilesCmd() = """{"cmd":"list_files"}"""
 
-    fun buildLoadFilamentCmd(targetTempCelsius: Int = 220) =
+    fun buildLoadFilamentCmd(targetTempCelsius: Int = 250) =
         """{"cmd":"load_filament","target_temp":$targetTempCelsius}"""
 
     fun buildUnloadFilamentCmd() = """{"cmd":"unload_filament"}"""

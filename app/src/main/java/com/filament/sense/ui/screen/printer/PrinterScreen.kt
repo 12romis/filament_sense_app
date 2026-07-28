@@ -479,7 +479,7 @@ fun PrinterScreen(
                         )
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             IconButton(
-                                onClick = { filamentSheetAction = true },
+                                onClick = { filamentSheetAction = false },
                                 enabled = isConnected,
                                 modifier = Modifier.size(36.dp),
                             ) {
@@ -492,7 +492,7 @@ fun PrinterScreen(
                                 )
                             }
                             IconButton(
-                                onClick = { filamentSheetAction = false },
+                                onClick = { filamentSheetAction = true },
                                 enabled = isConnected,
                                 modifier = Modifier.size(36.dp),
                             ) {
@@ -717,7 +717,7 @@ private fun HeatBedBottomSheet(
     onDismiss: () -> Unit,
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-    var sliderValue by remember { mutableFloatStateOf(61f) }
+    var sliderValue by remember { mutableFloatStateOf(55f) }
     val target = sliderValue.roundToInt()
 
     ModalBottomSheet(
@@ -1160,9 +1160,9 @@ private fun FilamentActionBottomSheet(
                 Spacer(Modifier.height(12.dp))
                 Text(
                     text = if (isLoad)
-                        "Екструдер нагріється до 220°C і почне заряджання прутка. Переконайтесь, що філамент заведений у трубку подачі до зовнішньої котушки."
+                        "Екструдер нагріється до 250°C і почне заряджання прутка. Переконайтесь, що філамент заведений у трубку подачі."
                     else
-                        "Екструдер нагріється і вивантажить поточний пруток. Будьте готові притримати пруток біля подавача.",
+                        "Екструдер нагріється і вивантажить поточний пруток філаменту. Будьте готові вийняти пруток біля подавача.",
                     style = MaterialTheme.typography.bodySmall.copy(fontSize = 13.sp),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     textAlign = TextAlign.Center,

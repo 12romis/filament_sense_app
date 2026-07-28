@@ -21,10 +21,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.ui.draw.clip
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.KeyboardArrowDown
-import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material.icons.filled.KeyboardDoubleArrowDown
+import androidx.compose.material.icons.filled.KeyboardDoubleArrowUp
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -102,7 +101,8 @@ fun PrinterScreen(
     var showHeatSheet by remember { mutableStateOf(false) }
     var showNozzleHeatSheet by remember { mutableStateOf(false) }
     var showReprintSheet by remember { mutableStateOf(false) }
-    var showFilamentSheet by remember { mutableStateOf(false) }
+    // null = приховано, true = запит на завантаження, false = запит на вивантаження
+    var filamentSheetAction by remember { mutableStateOf<Boolean?>(null) }
 
     // Request fresh data whenever connection is established
     LaunchedEffect(isConnected) {
@@ -393,7 +393,6 @@ fun PrinterScreen(
 
             // ── Filament card ─────────────────────────────────────────────────
             val filamentInExtruder = if (isConnected) status?.filamentInExtruder else null
-            val isLoadAction = filamentInExtruder != true
             ElevatedCard(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -404,6 +403,16 @@ fun PrinterScreen(
                         .fillMaxWidth()
                         .padding(16.dp),
                 ) {
+                    // Рядок 1 — заголовок блоку (як "Файл")
+                    Text(
+                        text = "Філамент",
+                        style = MaterialTheme.typography.bodySmall.copy(fontSize = 13.sp),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+
+                    Spacer(Modifier.height(4.dp))
+
+                    // Рядок 2 — колір + назва активної котушки, тап веде на її екран
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -427,34 +436,37 @@ fun PrinterScreen(
                                     ),
                             )
                             Spacer(Modifier.width(8.dp))
+                            val spoolName = activeSpool?.let { it.name.ifEmpty { "Котушка #${it.id}" } }
+                                ?: "Немає активної котушки"
                             Text(
-                                text = "Філамент",
-                                style = MaterialTheme.typography.bodySmall.copy(fontSize = 13.sp),
+                                text = spoolName,
+                                style = MaterialTheme.typography.bodyMedium.copy(fontSize = 15.sp),
+                                fontWeight = FontWeight.Medium,
+                                color = MaterialTheme.colorScheme.onSurface,
+                            )
+                        }
+                        Column(horizontalAlignment = Alignment.End) {
+                            val pctText = activeSpool?.let { "${(it.remainingPercent * 100).toInt()}%" } ?: "—"
+                            Text(
+                                text = pctText,
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.primary,
+                            )
+                            val weightText = activeSpool?.let { "${it.remainingGrams.roundToInt().formatWeight()} г" } ?: "—"
+                            Text(
+                                text = weightText,
+                                style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.sp),
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Column(horizontalAlignment = Alignment.End) {
-                                val pctText = activeSpool?.let { "${(it.remainingPercent * 100).toInt()}%" } ?: "—"
-                                Text(
-                                    text = pctText,
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.primary,
-                                )
-                                val weightText = activeSpool?.let { "${it.remainingGrams.roundToInt().formatWeight()} г" } ?: "—"
-                                Text(
-                                    text = weightText,
-                                    style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.sp),
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                            }
-                        }
                     }
 
-                    Spacer(Modifier.height(12.dp))
+                    Spacer(Modifier.height(8.dp))
 
-                    Spacer(Modifier.height(2.dp))
+                    // Рядок 3 — статус датчика + завжди обидві дії (датчик лише фіксує
+                    // притиснутий впритул пруток, а не факт проходження через екструдер,
+                    // тож не можна ховати одну з дій залежно від його показань)
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
@@ -465,19 +477,33 @@ fun PrinterScreen(
                             style = MaterialTheme.typography.bodySmall.copy(fontSize = 13.sp),
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
-                        IconButton(
-                            onClick = { showFilamentSheet = true },
-                            enabled = isConnected,
-                            modifier = Modifier.size(36.dp),
-                        ) {
-                            Icon(
-                                imageVector = if (isLoadAction) Icons.Filled.KeyboardArrowDown
-                                              else Icons.Filled.KeyboardArrowUp,
-                                contentDescription = if (isLoadAction) "Завантажити філамент" else "Вивантажити філамент",
-                                tint = if (isConnected) MaterialTheme.colorScheme.onSurfaceVariant
-                                       else MaterialTheme.colorScheme.outline,
-                                modifier = Modifier.size(20.dp),
-                            )
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            IconButton(
+                                onClick = { filamentSheetAction = true },
+                                enabled = isConnected,
+                                modifier = Modifier.size(36.dp),
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Filled.KeyboardDoubleArrowUp,
+                                    contentDescription = "Завантажити філамент",
+                                    tint = if (isConnected) MaterialTheme.colorScheme.onSurfaceVariant
+                                           else MaterialTheme.colorScheme.outline,
+                                    modifier = Modifier.size(20.dp),
+                                )
+                            }
+                            IconButton(
+                                onClick = { filamentSheetAction = false },
+                                enabled = isConnected,
+                                modifier = Modifier.size(36.dp),
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Filled.KeyboardDoubleArrowDown,
+                                    contentDescription = "Вивантажити філамент",
+                                    tint = if (isConnected) MaterialTheme.colorScheme.onSurfaceVariant
+                                           else MaterialTheme.colorScheme.outline,
+                                    modifier = Modifier.size(20.dp),
+                                )
+                            }
                         }
                     }
                 }
@@ -529,16 +555,15 @@ fun PrinterScreen(
     }
 
     // ── Load/unload filament confirmation sheet ──────────────────────────────
-    if (showFilamentSheet) {
-        val isLoadAction = status?.filamentInExtruder != true
+    filamentSheetAction?.let { isLoadAction ->
         FilamentActionBottomSheet(
             isLoad = isLoadAction,
             isPrinting = status?.gcodeState?.uppercase() == "RUNNING",
             onConfirm = {
                 if (isLoadAction) viewModel.loadFilament() else viewModel.unloadFilament()
-                showFilamentSheet = false
+                filamentSheetAction = null
             },
-            onDismiss = { showFilamentSheet = false },
+            onDismiss = { filamentSheetAction = null },
         )
     }
 }
